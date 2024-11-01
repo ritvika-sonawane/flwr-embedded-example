@@ -1,8 +1,17 @@
 import argparse
+import logging
 from typing import List, Tuple
 
 import flwr as fl
 from flwr.common import Metrics
+
+# Configure logging for the server
+logging.basicConfig(
+    filename="server_log.log",
+    filemode="w",
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -55,6 +64,8 @@ def fit_config(server_round: int):
 
 def main():
     args = parser.parse_args()
+
+    logging.info("Starting Flower server with arguments: %s", args)
 
     print(args)
 
