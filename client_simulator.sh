@@ -13,6 +13,6 @@ SERVER_ADDRESS="${SERVER_IP}:8080"
 
 for ((i=0; i<NUM_CLIENTS; i++))
 do
-    osascript -e "tell application \"Terminal\" to do script \"cd $CLIENT_DIR && conda activate $CONDA_ENV && python3 $CLIENT_SCRIPT --cid=$i --server_address=$SERVER_ADDRESS --mnist\""
+    osascript -e "tell application \"Terminal\" to do script \"cd $CLIENT_DIR && conda activate $CONDA_ENV && python3 $CLIENT_SCRIPT --cid=$i --server_address=$SERVER_ADDRESS --fashion_mnist\""
     sleep 1
 done

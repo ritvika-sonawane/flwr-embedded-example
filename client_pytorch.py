@@ -31,6 +31,10 @@ parser.add_argument(
     help="If you use Raspberry Pi Zero clients (which just have 512MB or RAM) use "
     "MNIST",
 )
+parser.add_argument(
+    "--fashion_mnist",
+    action="store_true",
+)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 NUM_CLIENTS = 50
@@ -85,9 +89,13 @@ def test(net, testloader, device):
     return loss, accuracy
 
 
-def prepare_dataset(use_mnist: bool):
-    """Get MNIST/CIFAR-10 and return client partitions and global testset."""
-    if use_mnist:
+def prepare_dataset(use_mnist: bool, use_fashion_mnist: bool):
+    """Get MNIST/CIFAR-10/FASHION-MNIST and return client partitions and global testset."""
+    if use_fashion_mnist:
+        fds = FederatedDataset(dataset="fashion_mnist", partitioners={"train": NUM_CLIENTS})
+        img_key = "image"
+        norm = Normalize((0.1307,), (0.3081,))
+    elif use_mnist:
         fds = FederatedDataset(dataset="mnist", partitioners={"train": NUM_CLIENTS})
         img_key = "image"
         norm = Normalize((0.1307,), (0.3081,))
@@ -121,11 +129,11 @@ class FlowerClient(fl.client.NumPyClient):
     """A FlowerClient that trains a MobileNetV3 model for CIFAR-10 or a much smaller CNN
     for MNIST."""
 
-    def __init__(self, trainset, valset, use_mnist):
+    def __init__(self, trainset, valset, use_mnist, use_fashion_mnist):
         self.trainset = trainset
         self.valset = valset
         # Instantiate model
-        if use_mnist:
+        if use_mnist or use_fashion_mnist:
             self.model = Net()
         else:
             self.model = mobilenet_v3_small(num_classes=10)
@@ -179,14 +187,15 @@ def main():
     assert args.cid < NUM_CLIENTS
 
     use_mnist = args.mnist
+    use_fashion_mnist = args.fashion_mnist
     # Download dataset and partition it
-    trainsets, valsets, _ = prepare_dataset(use_mnist)
+    trainsets, valsets, _ = prepare_dataset(use_mnist, use_fashion_mnist)
 
     # Start Flower client setting its associated data partition
     fl.client.start_client(
         server_address=args.server_address,
         client=FlowerClient(
-            trainset=trainsets[args.cid], valset=valsets[args.cid], use_mnist=use_mnist
+            trainset=trainsets[args.cid], valset=valsets[args.cid], use_mnist=use_mnist, use_fashion_mnist=use_fashion_mnist
         ).to_client(),
     )
 
