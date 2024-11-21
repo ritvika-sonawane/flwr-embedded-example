@@ -1,0 +1,55 @@
+2024-11-21 15:19:44,766 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=5, sample_fraction=0.5, min_num_clients=2)
+2024-11-21 15:19:44,767 - INFO - Starting Flower server, config: num_rounds=5, no round_timeout
+2024-11-21 15:19:44,785 - INFO - Flower ECE: gRPC server running (5 rounds), SSL is disabled
+2024-11-21 15:19:44,785 - INFO - [INIT]
+2024-11-21 15:19:44,788 - INFO - Requesting initial parameters from one random client
+2024-11-21 15:19:54,067 - INFO - Received initial parameters from one random client
+2024-11-21 15:19:54,068 - INFO - Starting evaluation of initial global parameters
+2024-11-21 15:19:54,068 - INFO - Evaluation returned no results (`None`)
+2024-11-21 15:19:54,068 - INFO - 
+2024-11-21 15:19:54,068 - INFO - [ROUND 1]
+2024-11-21 15:19:54,426 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2024-11-21 15:19:57,055 - INFO - aggregate_fit: received 2 results and 0 failures
+2024-11-21 15:19:57,058 - WARNING - No fit_metrics_aggregation_fn provided
+2024-11-21 15:19:57,058 - INFO - configure_evaluate: strategy sampled 2 clients (out of 3)
+2024-11-21 15:19:57,108 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2024-11-21 15:19:57,108 - INFO - 
+2024-11-21 15:19:57,108 - INFO - [ROUND 2]
+2024-11-21 15:19:57,108 - INFO - configure_fit: strategy sampled 2 clients (out of 3)
+2024-11-21 15:19:58,913 - INFO - aggregate_fit: received 2 results and 0 failures
+2024-11-21 15:19:58,916 - INFO - configure_evaluate: strategy sampled 2 clients (out of 4)
+2024-11-21 15:19:58,950 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2024-11-21 15:19:58,950 - INFO - 
+2024-11-21 15:19:58,950 - INFO - [ROUND 3]
+2024-11-21 15:19:58,950 - INFO - configure_fit: strategy sampled 2 clients (out of 4)
+2024-11-21 15:20:00,595 - INFO - aggregate_fit: received 2 results and 0 failures
+2024-11-21 15:20:00,598 - INFO - configure_evaluate: strategy sampled 2 clients (out of 5)
+2024-11-21 15:20:00,623 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2024-11-21 15:20:00,623 - INFO - 
+2024-11-21 15:20:00,623 - INFO - [ROUND 4]
+2024-11-21 15:20:00,623 - INFO - configure_fit: strategy sampled 2 clients (out of 5)
+2024-11-21 15:20:02,120 - INFO - aggregate_fit: received 2 results and 0 failures
+2024-11-21 15:20:02,123 - INFO - configure_evaluate: strategy sampled 2 clients (out of 5)
+2024-11-21 15:20:02,153 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2024-11-21 15:20:02,153 - INFO - 
+2024-11-21 15:20:02,153 - INFO - [ROUND 5]
+2024-11-21 15:20:02,153 - INFO - configure_fit: strategy sampled 2 clients (out of 5)
+2024-11-21 15:20:03,593 - INFO - aggregate_fit: received 2 results and 0 failures
+2024-11-21 15:20:03,596 - INFO - configure_evaluate: strategy sampled 2 clients (out of 5)
+2024-11-21 15:20:03,621 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2024-11-21 15:20:03,621 - INFO - 
+2024-11-21 15:20:03,621 - INFO - [SUMMARY]
+2024-11-21 15:20:03,621 - INFO - Run finished 5 round(s) in 9.55s
+2024-11-21 15:20:03,621 - INFO - 	History (loss, distributed):
+2024-11-21 15:20:03,621 - INFO - 		round 1: 0.6193322539329529
+2024-11-21 15:20:03,621 - INFO - 		round 2: 0.3912808895111084
+2024-11-21 15:20:03,621 - INFO - 		round 3: 0.31856870651245117
+2024-11-21 15:20:03,621 - INFO - 		round 4: 0.3224795460700989
+2024-11-21 15:20:03,622 - INFO - 		round 5: 0.36508966982364655
+2024-11-21 15:20:03,622 - INFO - 	History (metrics, distributed, evaluate):
+2024-11-21 15:20:03,622 - INFO - 	{'accuracy': [(1, 0.9041666666666667),
+2024-11-21 15:20:03,622 - INFO - 	              (2, 0.9375),
+2024-11-21 15:20:03,622 - INFO - 	              (3, 0.9625),
+2024-11-21 15:20:03,622 - INFO - 	              (4, 0.9625),
+2024-11-21 15:20:03,622 - INFO - 	              (5, 0.9583333333333334)]}
+2024-11-21 15:20:03,622 - INFO - 

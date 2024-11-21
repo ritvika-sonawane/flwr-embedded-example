@@ -1,13 +1,14 @@
 import argparse
 import logging
 from typing import List, Tuple
+import time
 
 import flwr as fl
 from flwr.common import Metrics
 
 # Configure logging for the server
 logging.basicConfig(
-    filename="server_log.log",
+    filename=f"logs/server_log_{''.join(time.asctime().split()[:-1])}.log",
     filemode="w",
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
