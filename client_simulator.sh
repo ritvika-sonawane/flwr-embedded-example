@@ -2,7 +2,7 @@
 
 NUM_CLIENTS=5
 
-CLIENT_DIR="/Users/ritvikasonawane/Documents/r24k8xbv/0F24/QFL/embedded-devices"
+CLIENT_DIR="/Users/ritvikasonawane/Documents/r24k8xbv/0S25/QFL/embedded-devices-old"
 
 CLIENT_SCRIPT="client_pytorch.py"
 
@@ -13,6 +13,6 @@ SERVER_ADDRESS="${SERVER_IP}:8080"
 
 for ((i=0; i<NUM_CLIENTS; i++))
 do
-    osascript -e "tell application \"Terminal\" to do script \"cd $CLIENT_DIR && conda activate $CONDA_ENV && python3 $CLIENT_SCRIPT --cid=$i --server_address=$SERVER_ADDRESS --fashion_mnist\""
+    osascript -e "tell application \"Terminal\" to do script \"cd $CLIENT_DIR && conda activate $CONDA_ENV && python $CLIENT_SCRIPT --cid=$i --server_address=$SERVER_ADDRESS --dataset SC2\""
     sleep 1
 done
