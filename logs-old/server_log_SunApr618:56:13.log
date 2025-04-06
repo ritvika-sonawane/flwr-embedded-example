@@ -1,0 +1,39 @@
+2025-04-06 18:56:13,034 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=10, local_ep=1, sample_fraction=0.2, min_num_clients=2)
+2025-04-06 18:56:13,034 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-04-06 18:56:13,034 - INFO - Starting Flower server, config: num_rounds=10, no round_timeout
+2025-04-06 18:56:13,043 - INFO - Flower ECE: gRPC server running (10 rounds), SSL is disabled
+2025-04-06 18:56:13,044 - INFO - [INIT]
+2025-04-06 18:56:13,044 - INFO - Requesting initial parameters from one random client
+2025-04-06 18:56:24,735 - INFO - Received initial parameters from one random client
+2025-04-06 18:56:24,735 - INFO - Starting evaluation of initial global parameters
+2025-04-06 18:56:24,735 - INFO - Evaluation returned no results (`None`)
+2025-04-06 18:56:24,735 - INFO - 
+2025-04-06 18:56:24,735 - INFO - [ROUND 1]
+2025-04-06 18:56:27,101 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:56:27,162 - INFO - aggregate_fit: received 0 results and 2 failures
+2025-04-06 18:56:30,363 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 18:56:30,464 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-04-06 18:56:30,464 - INFO - 
+2025-04-06 18:56:30,464 - INFO - [ROUND 2]
+2025-04-06 18:56:32,781 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:56:32,798 - INFO - aggregate_fit: received 0 results and 2 failures
+2025-04-06 18:56:34,680 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 18:56:34,706 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-04-06 18:56:34,707 - INFO - 
+2025-04-06 18:56:34,707 - INFO - [ROUND 3]
+2025-04-06 18:56:36,094 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:56:36,113 - INFO - aggregate_fit: received 0 results and 2 failures
+2025-04-06 18:57:13,397 - INFO - Flower server terminated gracefully.

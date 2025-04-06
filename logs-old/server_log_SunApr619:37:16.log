@@ -1,0 +1,38 @@
+2025-04-06 19:37:16,753 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=10, local_ep=1, sample_fraction=0.2, min_num_clients=2)
+2025-04-06 19:37:16,753 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-04-06 19:37:16,753 - INFO - Starting Flower server, config: num_rounds=10, no round_timeout
+2025-04-06 19:37:16,762 - INFO - Flower ECE: gRPC server running (10 rounds), SSL is disabled
+2025-04-06 19:37:16,763 - INFO - [INIT]
+2025-04-06 19:37:16,763 - INFO - Requesting initial parameters from one random client
+2025-04-06 19:37:33,880 - INFO - Received initial parameters from one random client
+2025-04-06 19:37:33,881 - INFO - Starting evaluation of initial global parameters
+2025-04-06 19:37:33,881 - INFO - Evaluation returned no results (`None`)
+2025-04-06 19:37:33,881 - INFO - 
+2025-04-06 19:37:33,881 - INFO - [ROUND 1]
+2025-04-06 19:37:35,129 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 19:37:36,146 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 19:37:36,172 - WARNING - No fit_metrics_aggregation_fn provided
+2025-04-06 19:37:36,174 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 19:37:36,314 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-04-06 19:37:36,315 - INFO - 
+2025-04-06 19:37:36,315 - INFO - [ROUND 2]
+2025-04-06 19:38:15,907 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 19:38:16,837 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 19:38:16,868 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 19:39:06,622 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-04-06 19:39:06,669 - INFO - 
+2025-04-06 19:39:06,669 - INFO - [ROUND 3]
+2025-04-06 19:39:11,362 - INFO - Flower server terminated gracefully.

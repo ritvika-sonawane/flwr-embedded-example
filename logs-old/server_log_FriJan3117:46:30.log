@@ -1,0 +1,5 @@
+2025-01-31 17:46:30,019 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=3, sample_fraction=1.0, min_num_clients=2)
+2025-01-31 17:46:30,019 - INFO - Starting Flower server, config: num_rounds=3, no round_timeout
+2025-01-31 17:46:30,039 - INFO - Flower ECE: gRPC server running (3 rounds), SSL is disabled
+2025-01-31 17:46:30,040 - INFO - [INIT]
+2025-01-31 17:46:30,040 - INFO - Requesting initial parameters from one random client

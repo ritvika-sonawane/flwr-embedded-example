@@ -1,0 +1,51 @@
+2025-04-06 18:25:55,102 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=3, local_ep=1, sample_fraction=0.2, min_num_clients=2)
+2025-04-06 18:25:55,102 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-04-06 18:25:55,102 - INFO - Starting Flower server, config: num_rounds=3, no round_timeout
+2025-04-06 18:25:55,110 - INFO - Flower ECE: gRPC server running (3 rounds), SSL is disabled
+2025-04-06 18:25:55,111 - INFO - [INIT]
+2025-04-06 18:25:55,111 - INFO - Requesting initial parameters from one random client
+2025-04-06 18:26:04,785 - INFO - Received initial parameters from one random client
+2025-04-06 18:26:04,785 - INFO - Starting evaluation of initial global parameters
+2025-04-06 18:26:04,785 - INFO - Evaluation returned no results (`None`)
+2025-04-06 18:26:04,786 - INFO - 
+2025-04-06 18:26:04,786 - INFO - [ROUND 1]
+2025-04-06 18:26:05,330 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:07,308 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 18:26:07,310 - WARNING - No fit_metrics_aggregation_fn provided
+2025-04-06 18:26:07,310 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:07,945 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 18:26:07,945 - INFO - 
+2025-04-06 18:26:07,945 - INFO - [ROUND 2]
+2025-04-06 18:26:07,946 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:09,938 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 18:26:09,940 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:10,613 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 18:26:10,613 - INFO - 
+2025-04-06 18:26:10,613 - INFO - [ROUND 3]
+2025-04-06 18:26:10,613 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:12,637 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 18:26:12,639 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-04-06 18:26:13,271 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 18:26:13,271 - INFO - 
+2025-04-06 18:26:13,271 - INFO - [SUMMARY]
+2025-04-06 18:26:13,271 - INFO - Run finished 3 round(s) in 8.49s
+2025-04-06 18:26:13,272 - INFO - 	History (loss, distributed):
+2025-04-06 18:26:13,272 - INFO - 		round 1: 2.1788976192474365
+2025-04-06 18:26:13,272 - INFO - 		round 2: 1.2233519554138184
+2025-04-06 18:26:13,272 - INFO - 		round 3: 1.207105576992035
+2025-04-06 18:26:13,272 - INFO - 	History (metrics, distributed, evaluate):
+2025-04-06 18:26:13,272 - INFO - 	{'accuracy': [(1, 0.9316666666666666), (2, 0.9658333333333333), (3, 0.9625)]}
+2025-04-06 18:26:13,272 - INFO - 

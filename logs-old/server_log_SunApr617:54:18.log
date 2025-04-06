@@ -1,0 +1,109 @@
+2025-04-06 17:54:18,521 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=10, local_ep=6, sample_fraction=0.2, min_num_clients=2)
+2025-04-06 17:54:18,522 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-04-06 17:54:18,522 - INFO - Starting Flower server, config: num_rounds=10, no round_timeout
+2025-04-06 17:54:18,530 - INFO - Flower ECE: gRPC server running (10 rounds), SSL is disabled
+2025-04-06 17:54:18,533 - INFO - [INIT]
+2025-04-06 17:54:18,533 - INFO - Requesting initial parameters from one random client
+2025-04-06 17:54:42,431 - INFO - Received initial parameters from one random client
+2025-04-06 17:54:42,431 - INFO - Starting evaluation of initial global parameters
+2025-04-06 17:54:42,431 - INFO - Evaluation returned no results (`None`)
+2025-04-06 17:54:42,431 - INFO - 
+2025-04-06 17:54:42,431 - INFO - [ROUND 1]
+2025-04-06 17:54:47,282 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-04-06 17:55:04,882 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:55:04,885 - WARNING - No fit_metrics_aggregation_fn provided
+2025-04-06 17:55:04,885 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:06,014 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:55:06,014 - INFO - 
+2025-04-06 17:55:06,014 - INFO - [ROUND 2]
+2025-04-06 17:55:06,015 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:19,760 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:55:19,763 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:20,793 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:55:20,793 - INFO - 
+2025-04-06 17:55:20,793 - INFO - [ROUND 3]
+2025-04-06 17:55:20,793 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:33,447 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:55:33,448 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:34,801 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:55:34,801 - INFO - 
+2025-04-06 17:55:34,802 - INFO - [ROUND 4]
+2025-04-06 17:55:34,802 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:50,283 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:55:50,288 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:55:51,674 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:55:51,674 - INFO - 
+2025-04-06 17:55:51,674 - INFO - [ROUND 5]
+2025-04-06 17:55:51,675 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:05,791 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:56:05,794 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:06,978 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:56:06,978 - INFO - 
+2025-04-06 17:56:06,978 - INFO - [ROUND 6]
+2025-04-06 17:56:06,978 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:19,565 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:56:19,566 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:20,594 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:56:20,594 - INFO - 
+2025-04-06 17:56:20,594 - INFO - [ROUND 7]
+2025-04-06 17:56:20,594 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:33,260 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:56:33,262 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:34,513 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:56:34,513 - INFO - 
+2025-04-06 17:56:34,513 - INFO - [ROUND 8]
+2025-04-06 17:56:34,513 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:47,170 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:56:47,172 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:56:48,208 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:56:48,209 - INFO - 
+2025-04-06 17:56:48,209 - INFO - [ROUND 9]
+2025-04-06 17:56:48,209 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:57:00,640 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:57:00,642 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:57:01,931 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:57:01,931 - INFO - 
+2025-04-06 17:57:01,931 - INFO - [ROUND 10]
+2025-04-06 17:57:01,932 - INFO - configure_fit: strategy sampled 2 clients (out of 10)
+2025-04-06 17:57:14,477 - INFO - aggregate_fit: received 2 results and 0 failures
+2025-04-06 17:57:14,479 - INFO - configure_evaluate: strategy sampled 2 clients (out of 10)
+2025-04-06 17:57:15,703 - INFO - aggregate_evaluate: received 2 results and 0 failures
+2025-04-06 17:57:15,703 - INFO - 
+2025-04-06 17:57:15,703 - INFO - [SUMMARY]
+2025-04-06 17:57:15,704 - INFO - Run finished 10 round(s) in 153.27s
+2025-04-06 17:57:15,704 - INFO - 	History (loss, distributed):
+2025-04-06 17:57:15,704 - INFO - 		round 1: 5.188479423522949
+2025-04-06 17:57:15,704 - INFO - 		round 2: 4.305590867996216
+2025-04-06 17:57:15,704 - INFO - 		round 3: 3.532659888267517
+2025-04-06 17:57:15,704 - INFO - 		round 4: 3.2738044261932373
+2025-04-06 17:57:15,704 - INFO - 		round 5: 3.867315411567688
+2025-04-06 17:57:15,704 - INFO - 		round 6: 3.584612250328064
+2025-04-06 17:57:15,704 - INFO - 		round 7: 3.408645987510681
+2025-04-06 17:57:15,704 - INFO - 		round 8: 4.067331790924072
+2025-04-06 17:57:15,704 - INFO - 		round 9: 4.0806074142456055
+2025-04-06 17:57:15,704 - INFO - 		round 10: 4.111771941184998
+2025-04-06 17:57:15,704 - INFO - 	History (metrics, distributed, evaluate):
+2025-04-06 17:57:15,704 - INFO - 	{'accuracy': [(1, 0.82),
+2025-04-06 17:57:15,704 - INFO - 	              (2, 0.8641666666666666),
+2025-04-06 17:57:15,704 - INFO - 	              (3, 0.875),
+2025-04-06 17:57:15,704 - INFO - 	              (4, 0.875),
+2025-04-06 17:57:15,705 - INFO - 	              (5, 0.8608333333333333),
+2025-04-06 17:57:15,705 - INFO - 	              (6, 0.8766666666666667),
+2025-04-06 17:57:15,705 - INFO - 	              (7, 0.8766666666666667),
+2025-04-06 17:57:15,705 - INFO - 	              (8, 0.8741666666666666),
+2025-04-06 17:57:15,705 - INFO - 	              (9, 0.8641666666666666),
+2025-04-06 17:57:15,705 - INFO - 	              (10, 0.8875)]}
+2025-04-06 17:57:15,705 - INFO - 

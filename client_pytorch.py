@@ -1,11 +1,13 @@
 import argparse
 import warnings
 from collections import OrderedDict
+import os
+from utils.logging_utils import setup_logger, log_metrics, CommunicationTimer
 
 import flwr as fl
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.data as data
 from flwr_datasets import FederatedDataset
 from torch.utils.data import DataLoader
@@ -13,7 +15,10 @@ import torch.optim as optim
 from torchvision.models import mobilenet_v3_small
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
-from sc_quantized import BGRUTaggerQuantizable, prepare_scrimmage_data, train_brnn, val_brnn
+from sc_manually_quantized import prepare_scrimmage_data, post_training_quantization, compare_model_sizes
+from models import *
+from quantize.k_means import KMeansQuantizer
+from flwr_datasets.partitioner import NaturalIdPartitioner, IidPartitioner
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -32,33 +37,18 @@ parser.add_argument(
     "--dataset",
     type=str,
     default="cifar10",
-    help="Dataset to use. Options: SC2, cifar10, mnist, fashion_mnist",
+    help="Dataset to use. Options: SC2, cifar10, mnist, femnist",
 )
+parser.add_argument(
+    "--non_iid",
+    action="store_true",
+    default=False,
+    help="Use non-IID partitioning for the dataset",
+)
+
 
 warnings.filterwarnings("ignore", category=UserWarning)
 NUM_CLIENTS = 10
-
-
-class Net(nn.Module):
-    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')."""
-
-    def __init__(self) -> None:
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 4 * 4, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 4 * 4)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
-
 
 def train(net, trainloader, optimizer, epochs, device):
     """Train the model on the training set."""
@@ -67,41 +57,75 @@ def train(net, trainloader, optimizer, epochs, device):
         for batch in tqdm(trainloader):
             batch = list(batch.values())
             images, labels = batch[0], batch[1]
+            # Convert string labels to numeric indices
+            if isinstance(labels[0], str):
+                # Create a mapping of unique labels to indices
+                unique_labels = list(set(labels))
+                label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
+                # Convert labels to indices
+                labels = [label_to_idx[label] for label in labels]
+                # Convert to tensor
+                labels = torch.tensor(labels)
+            images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
-            criterion(net(images.to(device)), labels.to(device)).backward()
+            outputs = net(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
             optimizer.step()
 
 
-def test(net, testloader, device):
-    """Validate the model on the test set."""
+def test(net, testloader, device: str = "cpu"):
+    """Validate the network on the testing set."""
     criterion = torch.nn.CrossEntropyLoss()
-    correct, loss = 0, 0.0
+    correct, total, loss = 0, 0, 0.0
+    net.eval()
     with torch.no_grad():
         for batch in tqdm(testloader):
+            # Handle dictionary format from FederatedDataset
             batch = list(batch.values())
             images, labels = batch[0], batch[1]
-            outputs = net(images.to(device))
-            labels = labels.to(device)
+            # print(labels)
+            if isinstance(labels[0], str):
+                # Create a mapping of unique labels to indices
+                unique_labels = list(set(labels))
+                label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
+                # Convert labels to indices
+                labels = [label_to_idx[label] for label in labels]
+                # Convert to tensor
+                labels = torch.tensor(labels)
+            images, labels = images.to(device), labels.to(device)
+            outputs = net(images)
             loss += criterion(outputs, labels).item()
-            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-    accuracy = correct / len(testloader.dataset)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = correct / total
     return loss, accuracy
 
 
-def prepare_dataset(dataset):
+def prepare_dataset(dataset, non_iid=False):
     """Get dataset and return client partitions and global testset."""
     print("Dataset: ", dataset)
-    if dataset == "mnist" or dataset == "fashion_mnist":
-        fds = FederatedDataset(dataset="fashion_mnist", partitioners={"train": NUM_CLIENTS})
+    if dataset == "mnist":
+        fds = FederatedDataset(dataset="mnist", partitioners={"train": IidPartitioner(num_partitions=NUM_CLIENTS)})
+        img_key = "image"
+        norm = Normalize((0.1307,), (0.3081,))
+    elif dataset == "femnist":
+        fds = FederatedDataset(
+            dataset="flwrlabs/femnist",
+            partitioners={"train": NaturalIdPartitioner(partition_by="writer_id")}
+        )
         img_key = "image"
         norm = Normalize((0.1307,), (0.3081,))
     elif dataset == "cifar10":
-        fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
+        fds = FederatedDataset(dataset="cifar10", partitioners={"train": IidPartitioner(num_partitions=NUM_CLIENTS)})
         img_key = "img"
         norm = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     elif dataset == "sc2":
         partitions = prepare_scrimmage_data(NUM_CLIENTS)
-    norm = Normalize((0.1307,), (0.3081,))
+    else:
+        raise ValueError(f"Unsupported dataset: {dataset}")
+
     pytorch_transforms = Compose([ToTensor(), norm])
 
     def apply_transforms(batch):
@@ -111,17 +135,52 @@ def prepare_dataset(dataset):
 
     trainsets = []
     validsets = []
+    testsets = []
+    
     for partition_id in range(NUM_CLIENTS):
-        # partition = fds.load_partition(partition_id)
-        partition = partitions[partition_id]
-        # Divide data on each node: 90% train, 10% test
-        partition = partition.train_test_split(test_size=0.1, seed=42)
-        # partition = partition.with_transform(apply_transforms)
-        trainsets.append(partition["train"])
-        validsets.append(partition["test"])
-    # testset = fds.load_split("test")
-    # testset = testset.with_transform(apply_transforms)
-    return trainsets, validsets, None
+        if dataset == "sc2":
+            partition = partitions[partition_id]
+        else:
+            partition = fds.load_partition(partition_id)
+            
+        # Split into train (70%), validation (15%), and test (15%)
+        if dataset == "femnist":
+            # For FEMNIST, we need to handle the writer_id-based partitioning
+            train_val = partition.train_test_split(test_size=0.3, seed=42)
+            val_test = train_val["test"].train_test_split(test_size=0.5, seed=42)
+            
+            train = train_val["train"]
+            val = val_test["train"]
+            test = val_test["test"]
+        else:
+            # For other datasets, use standard split
+            train_val = partition.train_test_split(test_size=0.3, seed=42)
+            val_test = train_val["test"].train_test_split(test_size=0.5, seed=42)
+            
+            train = train_val["train"]
+            val = val_test["train"]
+            test = val_test["test"]
+        
+        # Apply transforms
+        train = train.with_transform(apply_transforms)
+        val = val.with_transform(apply_transforms)
+        test = test.with_transform(apply_transforms)
+        
+        trainsets.append(train)
+        validsets.append(val)
+        testsets.append(test)
+
+    if dataset != "sc2":
+        # Load global test set if available
+        try:
+            testset = fds.load_split("test")
+            testset = testset.with_transform(apply_transforms)
+        except:
+            testset = None
+    else:
+        testset = None
+
+    return trainsets, validsets, testsets, testset
 
 
 # Flower client, adapted from Pytorch quickstart/simulation example
@@ -129,104 +188,100 @@ class FlowerClient(fl.client.NumPyClient):
     """A FlowerClient that trains a MobileNetV3 model for CIFAR-10 or a much smaller CNN
     for MNIST."""
 
-    def __init__(self, trainset, valset, dataset):
+    def __init__(self, trainset, valset, dataset, cid):
+        EMBEDDING_DIM = 2
+        HIDDEN_DIM = 100
+        TAGSET_SIZE = 2
+        NUM_EPOCHS = 1
+        TRAIN_BATCH_SIZE = 1024
+        VAL_BATCH_SIZE = 128
         self.trainset = trainset
         self.valset = valset
+        self.cid = cid
+        self.logger = setup_logger(cid)
+        
         # Instantiate model
-        if dataset in ["cifar10", "mnist", "fashion_mnist"]:
-            self.model = Net()
+        if dataset in ["mnist", "fashion_mnist"]:
+            self.model = LeNet5()
+        elif dataset == "femnist":
+            self.model = FEMNISTCNN()
+        elif dataset == "cifar10":
+            self.model = VeryDeepCNN()
         elif dataset == "sc2":
-            self.model = BGRUTaggerQuantizable()
-            # self.model = Net()
+            self.model = BGRUTagger(embedding_dim=EMBEDDING_DIM, hidden_dim=HIDDEN_DIM, tagset_size=TAGSET_SIZE)
         else:
             self.model = mobilenet_v3_small(num_classes=10)
+        
         # Determine device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)  # send model to device
+        self.model.to(self.device)
+        self.bitwidths = [8, 4, 2, 1]
+        
+        self.logger.info(f"Client {cid} initialized with device: {self.device}")
 
     def set_parameters(self, params):
-        """Set model weights from a list of NumPy ndarrays."""
-        params_dict = zip(self.model.state_dict().keys(), params)
-        state_dict = OrderedDict(
-            {
-                k: torch.Tensor(v) if v.shape != torch.Size([]) else torch.Tensor([0])
-                for k, v in params_dict
-            }
-        )
-        self.model.load_state_dict(state_dict, strict=True)
+        with CommunicationTimer(self.logger, "set_parameters"):
+            params_dict = zip(self.model.state_dict().keys(), params)
+            state_dict = OrderedDict(
+                {
+                    k: torch.Tensor(v) if v.shape != torch.Size([]) else torch.Tensor([0])
+                    for k, v in params_dict
+                }
+            )
+            self.model.load_state_dict(state_dict, strict=True)
 
     def get_parameters(self, config):
-        return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-
-    # def fit(self, parameters, config):
-    #     print("Client sampled for fit()")
-    #     self.set_parameters(parameters)
-    #     # Read hyperparameters from config set by the server
-    #     batch, epochs = config["batch_size"], config["epochs"]
-    #     # Construct dataloader
-    #     trainloader = DataLoader(self.trainset, batch_size=batch, shuffle=False)
-    #     # Define optimizer
-    #     optimizer = optim.Adam(self.model.parameters(), 0.0001)
-    #     # Train
-    #     # train(self.model, trainloader, optimizer, epochs=epochs, device=self.device)
-    #     train_brnn(self.model, self.trainset, NUM_CLIENTS=3, NUM_EPOCHS=epochs, optimizer=optimizer)
-    #     # Return local model and statistics
-    #     return self.get_parameters({}), len(trainloader.dataset), {}
+        with CommunicationTimer(self.logger, "get_parameters"):
+            return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
 
     def fit(self, parameters, config):
-        print("Client sampled for fit()")
-        self.set_parameters(parameters)
-        
-        # Read hyperparameters from config set by the server
-        batch, epochs = config["batch_size"], config["epochs"]
+        self.logger.info("Starting fit operation")
+        with CommunicationTimer(self.logger, "fit"):
+            self.set_parameters(parameters)
+            batch, epochs = config["batch_size"], config["epochs"]
+            trainloader = DataLoader(self.trainset, batch_size=batch, shuffle=True)
+            optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+            
+            train(self.model, trainloader, optimizer, epochs=epochs, device=self.device)
+            
+            # Log metrics after training
+            metrics = {
+                "training_epochs": epochs,
+                "batch_size": batch,
+                "dataset_size": len(trainloader.dataset)
+            }
+            log_metrics(self.logger, metrics)
+            
+            return self.get_parameters({}), len(trainloader.dataset), {}
 
-        # Extract features (SNR, MCS) and labels (Frame_Error) as tensors
-        train_df = self.trainset.to_pandas()
-        train_x = torch.tensor(train_df[['SNR', 'MCS']].values, dtype=torch.float32)
-        train_y = torch.tensor(train_df['Frame_Error'].values, dtype=torch.long)
-
-        # Create DataLoader from the partition
-        train_dataset = data.TensorDataset(train_x, train_y)
-        trainloader = data.DataLoader(train_dataset, batch_size=1024, shuffle=False, num_workers=16, pin_memory=True)
-
-        # Define optimizer
-        optimizer = optim.Adam(self.model.parameters(), 0.0001)
-
-        # Train using the DataLoader
-        train_brnn(self.model, NUM_EPOCHS=epochs, trainloader=trainloader, optimizer=optimizer)
-
-        # Return local model and statistics
-        return self.get_parameters({}), len(trainloader.dataset), {}
-
-    # def evaluate(self, parameters, config):
-    #     print("Client sampled for evaluate()")
-    #     self.set_parameters(parameters)
-    #     # Construct dataloader
-    #     # Extract features (SNR, MCS) and labels (Frame_Error) as tensors
-    #     val_x = torch.tensor(self.valset[['SNR', 'MCS']].to_pandas().values, dtype=torch.float32)
-    #     val_y = torch.tensor(self.valset['Frame_Error'].to_pandas().values, dtype=torch.long)
-
-    #     # Create DataLoader from the partition
-    #     import torch.utils.data as data
-    #     # valloader = DataLoader(self.valset, batch_size=64)
-    #     val_dataset = data.TensorDataset(val_x, val_y)
-    #     valloader = data.DataLoader(val_dataset, batch_size=64, shuffle=False, num_workers=16, pin_memory=True)
-    #     # Evaluate
-    #     loss, accuracy = test(self.model, valloader, device=self.device)
-    #     # Return statistics
-    #     return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
     def evaluate(self, parameters, config):
-        self.set_parameters(parameters)
-
-        val_df = self.valset.to_pandas()
-        val_x = torch.tensor(val_df[['SNR', 'MCS']].values, dtype=torch.float32)
-        val_y = torch.tensor(val_df['Frame_Error'].values, dtype=torch.long)
-        valloader = data.DataLoader(data.TensorDataset(val_x, val_y), batch_size=64)
-        
-        loss, accuracy = test(self.model, valloader, self.device)
-        val_brnn(self.model, valloader=valloader)
-        return float(loss), len(valloader.dataset), {"accuracy": accuracy}
-
+        self.logger.info("Starting evaluate operation")
+        with CommunicationTimer(self.logger, "evaluate"):
+            self.set_parameters(parameters)
+            valloader = DataLoader(self.valset, batch_size=64)
+            loss, accuracy = test(self.model, valloader, device=self.device)
+            
+            # Log evaluation metrics
+            metrics = {
+                "validation_loss": loss,
+                "validation_accuracy": accuracy,
+                "validation_dataset_size": len(valloader.dataset)
+            }
+            log_metrics(self.logger, metrics)
+            
+            # Save and quantize model
+            os.makedirs("models", exist_ok=True)
+            original_model_path = "models/original_model.pt"
+            torch.save(self.model.state_dict(), original_model_path)
+            
+            saved_model = type(self.model)()
+            saved_model.load_state_dict(torch.load(original_model_path))
+            quantized_model = post_training_quantization(saved_model, valloader, original_model_path)
+            torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
+            
+            compare_model_sizes(self.model, quantized_model)
+            
+            return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
 
 def main():
     args = parser.parse_args()
@@ -235,14 +290,17 @@ def main():
     assert args.cid < NUM_CLIENTS
 
     dataset = args.dataset.lower()
-    # Download dataset and partition itn
-    trainsets, valsets, _ = prepare_dataset(dataset)
+    # Download dataset and partition it
+    trainsets, valsets, testsets, testset = prepare_dataset(dataset, non_iid=args.non_iid)
 
     # Start Flower client setting its associated data partition
     fl.client.start_client(
         server_address=args.server_address,
         client=FlowerClient(
-            trainset=trainsets[args.cid], valset=valsets[args.cid], dataset=dataset
+            trainset=trainsets[args.cid],
+            valset=valsets[args.cid],
+            dataset=dataset,
+            cid=args.cid
         ).to_client(),
     )
 

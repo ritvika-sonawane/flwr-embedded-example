@@ -1,0 +1,71 @@
+2025-02-13 15:43:45,822 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=3, sample_fraction=1.0, min_num_clients=2)
+2025-02-13 15:43:45,822 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-02-13 15:43:45,822 - INFO - Starting Flower server, config: num_rounds=3, no round_timeout
+2025-02-13 15:43:45,834 - INFO - Flower ECE: gRPC server running (3 rounds), SSL is disabled
+2025-02-13 15:43:45,834 - INFO - [INIT]
+2025-02-13 15:43:45,834 - INFO - Requesting initial parameters from one random client
+2025-02-13 15:43:58,298 - INFO - Received initial parameters from one random client
+2025-02-13 15:43:58,299 - INFO - Starting evaluation of initial global parameters
+2025-02-13 15:43:58,299 - INFO - Evaluation returned no results (`None`)
+2025-02-13 15:43:58,299 - INFO - 
+2025-02-13 15:43:58,299 - INFO - [ROUND 1]
+2025-02-13 15:43:58,770 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-02-13 15:44:01,529 - INFO - aggregate_fit: received 0 results and 2 failures
+2025-02-13 15:45:01,222 - ERROR - Exception iterating responses: 
+Traceback (most recent call last):
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/grpc/_server.py", line 654, in _take_response_from_response_iterator
+    return next(response_iterator), True
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/flower_service_servicer.py", line 119, in Join
+    ins_wrapper: InsWrapper = next(ins_wrapper_iterator)
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 166, in ins_wrapper_iterator
+    self._raise_if_closed()
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 82, in _raise_if_closed
+    raise GrpcBridgeClosed()
+flwr.server.superlink.fleet.grpc_bidi.grpc_bridge.GrpcBridgeClosed
+2025-02-13 15:45:06,530 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-02-13 15:45:06,539 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-02-13 15:45:06,539 - INFO - 
+2025-02-13 15:45:06,539 - INFO - [ROUND 2]
+2025-02-13 15:45:06,540 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-02-13 15:45:12,818 - INFO - aggregate_fit: received 0 results and 2 failures
+2025-02-13 15:46:28,139 - ERROR - Exception iterating responses: 
+Traceback (most recent call last):
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/grpc/_server.py", line 654, in _take_response_from_response_iterator
+    return next(response_iterator), True
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/flower_service_servicer.py", line 119, in Join
+    ins_wrapper: InsWrapper = next(ins_wrapper_iterator)
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 166, in ins_wrapper_iterator
+    self._raise_if_closed()
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 82, in _raise_if_closed
+    raise GrpcBridgeClosed()
+flwr.server.superlink.fleet.grpc_bidi.grpc_bridge.GrpcBridgeClosed
+2025-02-13 15:46:34,017 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-02-13 15:46:34,043 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-02-13 15:46:34,044 - INFO - 
+2025-02-13 15:46:34,044 - INFO - [ROUND 3]
+2025-02-13 15:46:34,044 - INFO - configure_fit: strategy sampled 2 clients (out of 2)
+2025-02-13 15:47:14,150 - INFO - Flower server terminated gracefully.
+2025-02-13 15:47:14,476 - ERROR - Exception iterating responses: 
+Traceback (most recent call last):
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/grpc/_server.py", line 654, in _take_response_from_response_iterator
+    return next(response_iterator), True
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/flower_service_servicer.py", line 119, in Join
+    ins_wrapper: InsWrapper = next(ins_wrapper_iterator)
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 166, in ins_wrapper_iterator
+    self._raise_if_closed()
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 82, in _raise_if_closed
+    raise GrpcBridgeClosed()
+flwr.server.superlink.fleet.grpc_bidi.grpc_bridge.GrpcBridgeClosed

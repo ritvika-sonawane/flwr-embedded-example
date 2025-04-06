@@ -8,11 +8,12 @@ import pickle
 from tqdm import tqdm
 from datasets import Dataset
 from flwr_datasets.partitioner import IidPartitioner
+from torch.utils.data import DataLoader
 import os
 from models import MLP, BGRUTagger, model_size, model_params
 from quantize.k_means import KMeansQuantizer
 
-bitwidths = [8, 4, 2, 1]
+bitwidths = [8, 4, 2]
 
 def get_data_data():
     with open('sc2/scrimmage4_link_dataset.pickle', 'rb') as file:
@@ -37,103 +38,36 @@ def prepare_scrimmage_data(NUM_CLIENTS):
     partitions = [partitioner.load_partition(i) for i in range(NUM_CLIENTS)]
     return partitions
 
-def train(model, trainloader, val_dataloader, NUM_EPOCHS, optimizer):
-    loss_function = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
-    for epoch_idx in range(NUM_EPOCHS): 
-        progress_training_epoch = tqdm(
-            trainloader, 
-            desc=f'Epoch {epoch_idx+1}/{NUM_EPOCHS}, Training',
-            miniters=1, ncols=88, position=0,
-            leave=True, total=len(trainloader), smoothing=.9)
-        train_loss = 0
-        train_size = 0
-        model.train()
-        for idx, item in enumerate(progress_training_epoch):
-            sentence, tags = item
-            model.zero_grad()
-            tag_scores = model(sentence)
-            loss = loss_function(tag_scores, tags)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss * tags.size()[0]
-            train_size += tags.size()[0]
-        print(f'Train loss:{train_loss.item()/train_size: .5f})')
-        validate(model, val_dataloader)
+def test(net, testloader):
+    """Validate the model on the test set."""
+    criterion = torch.nn.CrossEntropyLoss()
+    correct, loss = 0, 0.0
+    with torch.no_grad():
+        for batch in tqdm(testloader):
+            batch = list(batch.values())
+            # print(len(batch))
+            images, labels = batch[0], batch[1]
+            outputs = net(images)
+            labels = labels
+            loss += criterion(outputs, labels).item()
+            correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+    accuracy = correct / len(testloader.dataset)
+    return loss, accuracy
 
-
-def validate(model, valloader):
-    loss_function = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
-    for epoch_idx in range(1): 
-        test_loss = 0
-        test_size = 0
-        predict = []
-        target = []
-        progress_validation_epoch = tqdm(
-            valloader, 
-            desc=f'Epoch {epoch_idx+1}/{1}, Validation',
-            miniters=1, ncols=88, position=0, 
-            leave=True, total=len(valloader), smoothing=.9)
-        model.eval()
-        with torch.no_grad():
-            for idx, (sentence, tags) in enumerate(progress_validation_epoch):
-                tag_scores = model(sentence)
-                loss = loss_function(tag_scores, tags)
-                predict.append(tag_scores.argmax(dim=1).numpy())
-                target.append(tags.numpy())        
-                test_loss += loss * tags.size()[0]
-                test_size += tags.size()[0]
-        predict = np.concatenate(predict, axis=0)
-        target = np.concatenate(target, axis=0)
-
-        print(f'Validation loss:{test_loss.item()/test_size: .5f}')
-
-def post_training_quantization(model, test_dataloader):
+def post_training_quantization(model, test_dataloader, model_path):
     model.eval()
     quantizers = dict()
     for bitwidth in bitwidths:
-        model.load_state_dict(torch.load("models/original_model.pt", map_location=torch.device('cpu')))
+        model.load_state_dict(torch.load(model_path))
         print(f'k-means quantizing model into {bitwidth} bits')
         quantizer = KMeansQuantizer(model, bitwidth)
         quantized_model_size = model_size(model, bitwidth)
         print(f"    {bitwidth}-bit k-means quantized model has size={quantized_model_size:.2f} bytes")
-        quantized_model_accuracy = test(model, test_dataloader)
-        print(f"    {bitwidth}-bit k-means quantized model has accuracy={quantized_model_accuracy:.2f}%")
+        _, quantized_model_accuracy = test(model, test_dataloader)
+        print(f"    {bitwidth}-bit k-means quantized model has accuracy={quantized_model_accuracy*100:.2f}%")
         # print(quantizer.codebook)
         quantizers[bitwidth] = quantizer
     return model
-
-def test(model, test_dataloader):
-    loss_function = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 1.0]))
-    
-    test_loss = 0
-    test_size = 0
-    predict = []
-    target = []
-    
-    model.eval()
-    for name, param in model.named_parameters():
-        unique_values = torch.unique(param.data)
-        print(f"Parameter: {name}")
-        print(f"Unique values ({len(unique_values)}): {unique_values.cpu().numpy()}\n")
-
-    with torch.no_grad():
-        for sentence, tags in tqdm(test_dataloader, desc="Testing"):
-            tag_scores = model(sentence)
-            loss = loss_function(tag_scores, tags)
-            predict.append(tag_scores.argmax(dim=1).numpy())
-            target.append(tags.numpy())
-            test_loss += loss * tags.size()[0]
-            test_size += tags.size()[0]
-    
-    predict = np.concatenate(predict, axis=0)
-    target = np.concatenate(target, axis=0)
-    
-    accuracy = (predict == target).mean()
-    
-    print(f'\nModel test loss: {test_loss.item()/test_size:.5f}')
-    print(f'Model accuracy: {accuracy:.5f}')
-    
-    return accuracy*100
 
 def compare_model_sizes(original_model, quantized_model):
     original_size = model_size(original_model)
@@ -158,7 +92,7 @@ def main():
     TRAIN_BATCH_SIZE = 1024
     VAL_BATCH_SIZE = 128
 
-    partitions = prepare_scrimmage_data(NUM_CLIENTS=2)
+    partitions = prepare_scrimmage_data(NUM_CLIENTS=10)
     
     partition_df = partitions[0].to_pandas()
     
@@ -194,24 +128,25 @@ def main():
     
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
-    train(model, train_dataloader, val_dataloader, NUM_EPOCHS, optimizer)
-    validate(model, val_dataloader)
-    test(model, test_dataloader)
+    # train(model, train_dataloader, val_dataloader, NUM_EPOCHS, optimizer)
+    # validate(model, val_dataloader)
+    # test(model, test_dataloader)
 
-    torch.save(model.state_dict(), "models/original_model.pt")
-        
+    # torch.save(model.state_dict(), "models/original_model.pt")
+    model_path = "models/original_model_BGRU.pt"
+    
     model.load_state_dict(
-        torch.load("models/original_model.pt", map_location=torch.device('cpu'))
+        torch.load(model_path, map_location=torch.device('cpu'))
     )
     
-    quantized_model = post_training_quantization(model, test_dataloader)
+    quantized_model = post_training_quantization(model, test_dataloader, model_path)
 
     torch.save(quantized_model.state_dict(), "models/quantized_model.pt") 
     
-    accuracy = test(quantized_model, test_dataloader)
+    _, accuracy = test(quantized_model, test_dataloader)
     print(f"Quantized model accuracy: {accuracy:.2f}")
     
     compare_model_sizes(model, quantized_model)
     
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

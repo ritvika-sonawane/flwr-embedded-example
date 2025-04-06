@@ -1,0 +1,54 @@
+2025-02-20 03:20:32,605 - INFO - Starting Flower server with arguments: Namespace(server_address='0.0.0.0:8080', rounds=3, sample_fraction=1.0, min_num_clients=5)
+2025-02-20 03:20:32,606 - WARNING - 
+Setting `min_available_clients` lower than `min_fit_clients` or
+`min_evaluate_clients` can cause the server to fail when there are too few clients
+connected to the server. `min_available_clients` must be set to a value larger
+than or equal to the values of `min_fit_clients` and `min_evaluate_clients`.
+
+2025-02-20 03:20:32,606 - WARNING - DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+2025-02-20 03:20:32,606 - INFO - Starting Flower server, config: num_rounds=3, no round_timeout
+2025-02-20 03:20:32,616 - INFO - Flower ECE: gRPC server running (3 rounds), SSL is disabled
+2025-02-20 03:20:32,616 - INFO - [INIT]
+2025-02-20 03:20:32,616 - INFO - Requesting initial parameters from one random client
+2025-02-20 03:20:50,616 - INFO - Received initial parameters from one random client
+2025-02-20 03:20:50,617 - INFO - Starting evaluation of initial global parameters
+2025-02-20 03:20:50,617 - INFO - Evaluation returned no results (`None`)
+2025-02-20 03:20:50,617 - INFO - 
+2025-02-20 03:20:50,618 - INFO - [ROUND 1]
+2025-02-20 03:20:51,429 - INFO - Sampling failed: number of available clients (2) is less than number of requested clients (5).
+2025-02-20 03:20:51,429 - INFO - configure_fit: no clients selected, cancel
+2025-02-20 03:20:51,430 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-02-20 03:20:51,494 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-02-20 03:20:51,494 - INFO - 
+2025-02-20 03:20:51,494 - INFO - [ROUND 2]
+2025-02-20 03:20:55,320 - INFO - Sampling failed: number of available clients (2) is less than number of requested clients (5).
+2025-02-20 03:20:55,321 - INFO - configure_fit: no clients selected, cancel
+2025-02-20 03:20:55,322 - INFO - configure_evaluate: strategy sampled 2 clients (out of 2)
+2025-02-20 03:20:55,337 - INFO - aggregate_evaluate: received 0 results and 2 failures
+2025-02-20 03:20:55,338 - INFO - 
+2025-02-20 03:20:55,338 - INFO - [ROUND 3]
+2025-02-20 03:23:08,447 - ERROR - Exception iterating responses: 
+Traceback (most recent call last):
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/grpc/_server.py", line 654, in _take_response_from_response_iterator
+    return next(response_iterator), True
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/flower_service_servicer.py", line 119, in Join
+    ins_wrapper: InsWrapper = next(ins_wrapper_iterator)
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 166, in ins_wrapper_iterator
+    self._raise_if_closed()
+  File "/Users/ritvikasonawane/miniconda3/envs/flowerfl/lib/python3.10/site-packages/flwr/server/superlink/fleet/grpc_bidi/grpc_bridge.py", line 82, in _raise_if_closed
+    raise GrpcBridgeClosed()
+flwr.server.superlink.fleet.grpc_bidi.grpc_bridge.GrpcBridgeClosed
+2025-02-20 03:23:14,583 - INFO - Flower server terminated gracefully.

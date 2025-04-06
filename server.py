@@ -28,6 +28,12 @@ parser.add_argument(
     help="Number of rounds of federated learning (default: 5)",
 )
 parser.add_argument(
+    "--local_ep",
+    type=int,
+    default=1,
+    help="Number of local epochs of federated learning (default: 5)",
+)
+parser.add_argument(
     "--sample_fraction",
     type=float,
     default=1.0,
@@ -56,8 +62,9 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 
 def fit_config(server_round: int):
     """Return a configuration with static batch size and (local) epochs."""
+    args = parser.parse_args()
     config = {
-        "epochs": 3,  # Number of local epochs done by clients
+        "epochs": args.local_ep,  # Number of local epochs done by clients
         "batch_size": 16,  # Batch size to use by clients during fit()
     }
     return config
