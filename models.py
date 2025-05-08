@@ -62,6 +62,7 @@ class BGRUTagger(nn.Module):
         self.hidden2tag = nn.Linear(hidden_dim*2, tagset_size)
             
     def forward(self, sentence):
+        sentence = sentence.to(torch.float32)
         gru_out, _ = self.bgru(sentence.view(len(sentence), 1, -1))
         tag_space = self.hidden2tag(gru_out.view(len(sentence), -1))
         return tag_space
