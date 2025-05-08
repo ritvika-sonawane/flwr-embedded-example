@@ -310,7 +310,6 @@ class FlowerClient(fl.client.NumPyClient):
             self.set_parameters(parameters) 
             
             batch_size, epochs = config["batch_size"], config["epochs"]
-            # MODIFICATION: Changed num_workers from 2 back to 0
             trainloader = DataLoader(self.trainset, batch_size=batch_size, shuffle=True, num_workers=0) 
             optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9) 
             
@@ -333,7 +332,6 @@ class FlowerClient(fl.client.NumPyClient):
         with CommunicationTimer(self.logger, "evaluate_model_transfer_and_test"): 
             self.set_parameters(parameters)
             
-            # MODIFICATION: Changed num_workers from 2 back to 0
             valloader = DataLoader(self.valset, batch_size=64, num_workers=0) 
             loss, accuracy = test(self.model, valloader, device=self.device, logger=self.logger)
             
@@ -345,6 +343,17 @@ class FlowerClient(fl.client.NumPyClient):
             log_metrics(self.logger, metrics)
             
             self.logger.info("Evaluate operation completed.")
+            # Save and quantize model
+            os.makedirs("models", exist_ok=True)
+            original_model_path = "models/original_model.pt"
+            torch.save(self.model.state_dict(), original_model_path)
+            
+            saved_model = type(self.model)()
+            saved_model.load_state_dict(torch.load(original_model_path))
+            quantized_model = post_training_quantization(saved_model, valloader, original_model_path)
+            torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
+            
+            compare_model_sizes(self.model, quantized_model)
             return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
 
 def main():

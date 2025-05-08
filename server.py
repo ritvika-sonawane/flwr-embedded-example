@@ -126,14 +126,19 @@ def main():
     # print(args) # This print will not go to MQTT unless you change it to server_logger.info
 
     strategy = fl.server.strategy.FedAvg(
+        # fraction_fit=args.sample_fraction,
+        # fraction_evaluate=1.0,
+        # min_fit_clients=args.min_num_clients,
+        # min_evaluate_clients=args.min_num_clients, # Often good to set min_evaluate_clients too
+        # min_available_clients=args.min_num_clients, # Ensure enough clients are available overall
+        # on_fit_config_fn=fit_config,
+        # evaluate_metrics_aggregation_fn=weighted_average,
+        # You can add more callbacks here for logging, e.g., fit_round, evaluate_round
         fraction_fit=args.sample_fraction,
         fraction_evaluate=args.sample_fraction,
         min_fit_clients=args.min_num_clients,
-        min_evaluate_clients=args.min_num_clients, # Often good to set min_evaluate_clients too
-        min_available_clients=args.min_num_clients, # Ensure enough clients are available overall
         on_fit_config_fn=fit_config,
         evaluate_metrics_aggregation_fn=weighted_average,
-        # You can add more callbacks here for logging, e.g., fit_round, evaluate_round
     )
 
     server_logger.info("Flower server strategy configured. Starting server...")
