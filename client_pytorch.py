@@ -67,7 +67,8 @@ class CommunicationTimer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         end_time = time.time()
         duration = end_time - self.start_time
-        memory_usage = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        import psutil
+        memory_usage = psutil.Process().memory_info().rss
         
         # Log end of communication with metrics
         extra = {
@@ -162,21 +163,15 @@ parser.add_argument(
     help="Use non-IID partitioning for the dataset",
 )
 
-def train(net, trainloader, optimizer, epochs, device, logger, client_id=None):
+def train(net, trainloader, optimizer, epochs, device, logger=None, client_id=None):
     """Train the model on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
     
-    # Log training start
-    extra = {
-        'client_id': client_id,
-        'operation': 'training',
-        'event': 'training_start',
-        'metrics': {'epochs': epochs, 'batches_per_epoch': len(trainloader)}
-    }
-    logger.info(f"Starting training with {epochs} epochs", extra=extra)
+    # Only log initial training start (no MQTT logging for intermediate operations)
+    if logger:
+        print(f"Starting training with {epochs} epochs for client {client_id}")
     
     for epoch_num in range(epochs):
-        epoch_start_time = time.time()
         epoch_loss = 0.0
         
         for batch_idx, batch in enumerate(tqdm(trainloader, desc=f"Epoch {epoch_num+1} Training")):
@@ -197,43 +192,10 @@ def train(net, trainloader, optimizer, epochs, device, logger, client_id=None):
             optimizer.step()
             
             epoch_loss += loss.item()
-            
-            if batch_idx % 10 == 0:
-                extra = {
-                    'client_id': client_id,
-                    'operation': 'training',
-                    'event': 'batch_progress',
-                    'metrics': {
-                        'epoch': epoch_num + 1,
-                        'batch': batch_idx,
-                        'loss': loss.item()
-                    }
-                }
-                logger.debug(f"Epoch {epoch_num+1}, Batch {batch_idx}: Loss {loss.item():.4f}", extra=extra)
         
-        # Log epoch completion
-        epoch_duration = time.time() - epoch_start_time
-        avg_epoch_loss = epoch_loss / len(trainloader)
-        extra = {
-            'client_id': client_id,
-            'operation': 'training',
-            'event': 'epoch_complete',
-            'metrics': {
-                'epoch': epoch_num + 1,
-                'duration_seconds': epoch_duration,
-                'average_loss': avg_epoch_loss
-            }
-        }
-        logger.info(f"Completed epoch {epoch_num + 1}/{epochs}", extra=extra)
+        print(f"Client {client_id}: Completed epoch {epoch_num + 1}/{epochs}, Loss: {epoch_loss / len(trainloader):.4f}")
     
-    # Log training completion
-    extra = {
-        'client_id': client_id,
-        'operation': 'training',
-        'event': 'training_complete',
-        'metrics': {'total_epochs': epochs}
-    }
-    logger.info("Training completed", extra=extra)
+    print(f"Client {client_id}: Training completed")
 
 
 def test(net, testloader, device: str = "cpu", logger=None, client_id=None):
@@ -242,17 +204,9 @@ def test(net, testloader, device: str = "cpu", logger=None, client_id=None):
     correct, total, loss = 0, 0, 0.0
     net.eval()
     
-    # Log testing start
-    if logger:
-        extra = {
-            'client_id': client_id,
-            'operation': 'testing',
-            'event': 'testing_start',
-            'metrics': {'test_batches': len(testloader)}
-        }
-        logger.info("Starting model evaluation", extra=extra)
-    
-    test_start_time = time.time()
+    # Only log initial testing start (no MQTT logging for intermediate operations)
+    if logger and client_id:
+        print(f"Starting model evaluation for client {client_id}")
     
     with torch.no_grad():
         for batch in tqdm(testloader, desc="Testing"):
@@ -274,22 +228,9 @@ def test(net, testloader, device: str = "cpu", logger=None, client_id=None):
     
     accuracy = correct / total
     avg_loss = loss / len(testloader)
-    test_duration = time.time() - test_start_time
     
-    if logger:
-        extra = {
-            'client_id': client_id,
-            'operation': 'testing',
-            'event': 'testing_complete',
-            'metrics': {
-                'loss': avg_loss,
-                'accuracy': accuracy,
-                'correct_predictions': correct,
-                'total_samples': total,
-                'duration_seconds': test_duration
-            }
-        }
-        logger.info("Model evaluation completed", extra=extra)
+    if client_id:
+        print(f"Client {client_id}: Model evaluation completed - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
     
     return avg_loss, accuracy
 
@@ -403,7 +344,7 @@ class FlowerClient(fl.client.NumPyClient):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
-        # Log client initialization
+        # Log client initialization (kept as requested)
         extra = {
             'client_id': cid,
             'event': 'client_init',
@@ -454,89 +395,47 @@ class FlowerClient(fl.client.NumPyClient):
         self.logger.info("set_parameters completed", extra=extra)
 
     def fit(self, parameters, config):
-        extra = {
-            'client_id': self.cid,
-            'operation': 'fit',
-            'event': 'operation_start',
-            'metrics': {'config': config}
-        }
-        self.logger.info("Starting fit operation", extra=extra)
+        # No MQTT logging for fit operation, only console output
+        print(f"Client {self.cid}: Starting fit operation")
         
-        with CommunicationTimer(self.logger, "fit_model_transfer_and_train"):
-            self.set_parameters(parameters)
-            
-            batch_size, epochs = config["batch_size"], config["epochs"]
-            trainloader = DataLoader(self.trainset, batch_size=batch_size, shuffle=True, num_workers=0)
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
-            
-            train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, 
-                  logger=self.logger, client_id=self.cid)
-            
-            metrics = {
-                "training_epochs": epochs,
-                "batch_size": batch_size,
-                "dataset_size": len(trainloader.dataset)
-            }
-            log_metrics(self.logger, metrics, client_id=self.cid, operation="fit")
-            
-            extra = {
-                'client_id': self.cid,
-                'operation': 'fit',
-                'event': 'operation_complete',
-                'metrics': metrics
-            }
-            self.logger.info("Fit operation completed", extra=extra)
-            
-            return self.get_parameters({}), len(trainloader.dataset), {}
+        self.set_parameters(parameters)
+        
+        batch_size, epochs = config["batch_size"], config["epochs"]
+        trainloader = DataLoader(self.trainset, batch_size=batch_size, shuffle=True, num_workers=0)
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
+        
+        train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, 
+              logger=None, client_id=self.cid)  # No MQTT logger passed
+        
+        print(f"Client {self.cid}: Fit operation completed")
+        
+        return self.get_parameters({}), len(trainloader.dataset), {}
 
     def evaluate(self, parameters, config):
-        extra = {
-            'client_id': self.cid,
-            'operation': 'evaluate',
-            'event': 'operation_start',
-            'metrics': {'config': config}
-        }
-        self.logger.info("Starting evaluate operation", extra=extra)
+        # No MQTT logging for evaluate operation, only console output
+        print(f"Client {self.cid}: Starting evaluate operation")
         
-        with CommunicationTimer(self.logger, "evaluate_model_transfer_and_test"):
-            self.set_parameters(parameters)
-            
-            valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
-            loss, accuracy = test(self.model, valloader, device=self.device, 
-                                logger=self.logger, client_id=self.cid)
-            
-            metrics = {
-                "validation_loss": loss,
-                "validation_accuracy": accuracy,
-                "validation_dataset_size": len(valloader.dataset)
-            }
-            log_metrics(self.logger, metrics, client_id=self.cid, operation="evaluate")
-            
-            # Save and quantize model
-            os.makedirs("models", exist_ok=True)
-            original_model_path = "models/original_model.pt"
-            torch.save(self.model.state_dict(), original_model_path)
-            
-            saved_model = type(self.model)()
-            saved_model.load_state_dict(torch.load(original_model_path))
-            quantized_model = post_training_quantization(saved_model, valloader, original_model_path)
-            torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
-            
-            compare_model_sizes(self.model, quantized_model)
-            
-            extra = {
-                'client_id': self.cid,
-                'operation': 'evaluate',
-                'event': 'operation_complete',
-                'metrics': {
-                    'validation_loss': loss,
-                    'validation_accuracy': accuracy,
-                    'dataset_size': len(valloader.dataset)
-                }
-            }
-            self.logger.info("Evaluate operation completed", extra=extra)
-            
-            return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
+        self.set_parameters(parameters)
+        
+        valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
+        loss, accuracy = test(self.model, valloader, device=self.device, 
+                            logger=None, client_id=self.cid)  # No MQTT logger passed
+        
+        # Save and quantize model
+        os.makedirs("models", exist_ok=True)
+        original_model_path = "models/original_model.pt"
+        torch.save(self.model.state_dict(), original_model_path)
+        
+        saved_model = type(self.model)()
+        saved_model.load_state_dict(torch.load(original_model_path))
+        quantized_model = post_training_quantization(saved_model, valloader, original_model_path)
+        torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
+        
+        compare_model_sizes(self.model, quantized_model)
+        
+        print(f"Client {self.cid}: Evaluate operation completed - Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
+        
+        return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
 
 def main():
     args = parser.parse_args()
