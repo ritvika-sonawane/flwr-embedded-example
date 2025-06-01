@@ -286,13 +286,13 @@ def prepare_dataset(dataset, non_iid=False):
 
     return trainsets, validsets
 
-bitwidths = [8, 4]
+bitwidths = [8]
 
 def post_training_quantization(model, test_dataloader, model_path):
     model.eval()
     quantizers = dict()
     for bitwidth in bitwidths:
-        model.load_state_dict(torch.load(model_path))
+        # model.load_state_dict(torch.load(model_path))
         print(f'k-means quantizing model into {bitwidth} bits')
         quantizer = KMeansQuantizer(model, bitwidth)
         quantized_model_size = model_size(model, bitwidth)
@@ -407,6 +407,17 @@ class FlowerClient(fl.client.NumPyClient):
         train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, 
               logger=None, client_id=self.cid)  # No MQTT logger passed
         
+        # Post-training quantization after training
+        valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
+        os.makedirs("models", exist_ok=True)
+        original_model_path = "models/original_model.pt"
+        torch.save(self.model.state_dict(), original_model_path)
+        
+        quantized_model = post_training_quantization(self.model, valloader, original_model_path)
+        torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
+        
+        compare_model_sizes(self.model, quantized_model)
+        
         print(f"Client {self.cid}: Fit operation completed")
         
         return self.get_parameters({}), len(trainloader.dataset), {}
@@ -420,18 +431,6 @@ class FlowerClient(fl.client.NumPyClient):
         valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
         loss, accuracy = test(self.model, valloader, device=self.device, 
                             logger=None, client_id=self.cid)  # No MQTT logger passed
-        
-        # Save and quantize model
-        os.makedirs("models", exist_ok=True)
-        original_model_path = "models/original_model.pt"
-        torch.save(self.model.state_dict(), original_model_path)
-        
-        saved_model = type(self.model)()
-        saved_model.load_state_dict(torch.load(original_model_path))
-        quantized_model = post_training_quantization(saved_model, valloader, original_model_path)
-        torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
-        
-        compare_model_sizes(self.model, quantized_model)
         
         print(f"Client {self.cid}: Evaluate operation completed - Loss: {loss:.4f}, Accuracy: {accuracy:.4f}")
         
