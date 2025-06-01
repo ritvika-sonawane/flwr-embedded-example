@@ -1,28 +1,22 @@
+# python client_pytorch.py --cid 0 --server_address="0.0.0.0:8080" --dataset mnist
 import argparse
 import warnings
 from collections import OrderedDict
 import os
-# from utils.logging_utils import setup_logger, log_metrics, CommunicationTimer # Keep if still used for other things
-import logging # Added
-import mqtthandler # Added
-import paho.mqtt.client as mqtt # Added
-import time # Added for potential use in logging or MQTT connection
-
+import logging
+import json
+import mqtthandler
+# import paho.mqtt.client as mqtt
+import time
 import flwr as fl
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.utils.data as data
 from flwr_datasets import FederatedDataset
 from torch.utils.data import DataLoader
-import torch.optim as optim
 from torchvision.models import mobilenet_v3_small
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
-from sc_manually_quantized import prepare_scrimmage_data, post_training_quantization, compare_model_sizes # Assuming this exists
-from models import * # Assuming this exists
-from quantize.k_means import KMeansQuantizer # Assuming this exists
-from flwr_datasets.partitioner import NaturalIdPartitioner, IidPartitioner # Assuming this exists
+from models import *
+from quantize.k_means import KMeansQuantizer
+from flwr_datasets.partitioner import NaturalIdPartitioner, IidPartitioner
 
 # --- MQTT Configuration ---
 MQTT_BROKER_HOST = "localhost"
@@ -30,84 +24,117 @@ MQTT_BROKER_PORT = 1883
 MQTT_BASE_TOPIC_CLIENT = "federated_learning/client"
 
 warnings.filterwarnings("ignore", category=UserWarning)
+
 NUM_CLIENTS = 10
 
-# --- Define CommunicationTimer and log_metrics if not in utils.logging_utils or if they need MQTT specific adaptations ---
-# For demonstration, let's assume a simple CommunicationTimer and log_metrics.
-# If these are complex in your utils, you'll need to adapt them accordingly or ensure the logger they use is the MQTT-configured one.
+# --- Custom JSON Formatter for MQTT Logging ---
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_entry = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "client_id": getattr(record, 'client_id', None),
+            "operation": getattr(record, 'operation', None),
+            "metrics": getattr(record, 'metrics', None),
+            "duration": getattr(record, 'duration', None),
+            "packet_size": getattr(record, 'packet_size', None),
+            "memory_usage": getattr(record, 'memory_usage', None)
+        }
+        # Remove None values to keep JSON clean
+        log_entry = {k: v for k, v in log_entry.items() if v is not None}
+        return json.dumps(log_entry)
 
+# --- Define CommunicationTimer with JSON logging ---
 class CommunicationTimer:
     def __init__(self, logger, operation_name):
         self.logger = logger
         self.operation_name = operation_name
         self.start_time = None
-        self.communication_size = 0 # Placeholder for packet size
+        self.communication_size = 0
 
     def __enter__(self):
         self.start_time = time.time()
-        # Placeholder: you might need to intercept send/receive calls to measure packet size
-        # For example, by wrapping socket operations or Flower's transport mechanism if possible.
-        self.logger.info(f"Starting communication for {self.operation_name}")
+        # Log start of communication
+        extra = {
+            'operation': self.operation_name,
+            'event': 'communication_start'
+        }
+        self.logger.info(f"Starting communication for {self.operation_name}", extra=extra)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         end_time = time.time()
         duration = end_time - self.start_time
-        # Log communication time and packet size (if measured)
-        # The packet size logging would need actual measurement logic
-        memory_usage = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0 # Example memory usage
-        self.logger.info(
-            f"Finished communication for {self.operation_name}. "
-            f"Duration: {duration:.4f}s. "
-            f"Packet Size: {self.communication_size} bytes. " # This needs actual implementation
-            f"Memory Usage: {memory_usage} bytes."
-        )
-        # Reset for potential reuse if necessary
+        memory_usage = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        
+        # Log end of communication with metrics
+        extra = {
+            'operation': self.operation_name,
+            'event': 'communication_end',
+            'duration': duration,
+            'packet_size': self.communication_size,
+            'memory_usage': memory_usage,
+            'metrics': {
+                'duration_seconds': duration,
+                'packet_size_bytes': self.communication_size,
+                'memory_usage_bytes': memory_usage
+            }
+        }
+        self.logger.info(f"Finished communication for {self.operation_name}", extra=extra)
+        # Reset for potential reuse
         self.communication_size = 0
 
+def log_metrics(logger, metrics_dict, client_id=None, operation=None):
+    """Log metrics in JSON format"""
+    extra = {
+        'client_id': client_id,
+        'operation': operation,
+        'event': 'metrics',
+        'metrics': metrics_dict
+    }
+    logger.info("Metrics logged", extra=extra)
 
-def log_metrics(logger, metrics_dict):
-    for key, value in metrics_dict.items():
-        logger.info(f"Metric: {key} = {value}")
-
-# --- Modified/New Logger Setup ---
+# --- Modified Logger Setup with JSON formatting ---
 def setup_mqtt_logger(cid):
     logger = logging.getLogger(f"fl_client_{cid}")
     logger.setLevel(logging.INFO)
     
-    # Prevent duplicate handlers if this function is called multiple times
     if not logger.handlers:
-        # Console Handler (optional, for local debugging)
-        # console_handler = logging.StreamHandler()
-        # console_handler.setFormatter(logging.Formatter(f"%(asctime)s - %(name)s - %(levelname)s - Client {cid} - %(message)s"))
-        # logger.addHandler(console_handler)
-
-        # MQTT Handler
+        # MQTT Handler with JSON formatting
         mqtt_topic = f"{MQTT_BASE_TOPIC_CLIENT}/{cid}/logs"
         try:
             mqtt_handler = mqtthandler.MQTTHandler(
                 host=MQTT_BROKER_HOST,
                 topic=mqtt_topic,
                 port=MQTT_BROKER_PORT,
-                # qos=1, # Optional: Quality of Service
-                # retain=False, # Optional: Retain messages
-                # client_id=f"fl_client_logger_{cid}" # Optional: custom client ID
+                # qos=1,
+                # retain=False,
+                # client_id=f"fl_client_logger_{cid}"
             )
-            mqtt_handler.setFormatter(logging.Formatter(f"%(asctime)s - %(name)s - %(levelname)s - Client {cid} - %(message)s"))
+            
+            # Use JSON formatter
+            json_formatter = JSONFormatter()
+            mqtt_handler.setFormatter(json_formatter)
             mqtt_handler.setLevel(logging.INFO)
             logger.addHandler(mqtt_handler)
-            logger.info(f"MQTT logging initialized for client {cid} on topic {mqtt_topic}")
+            
+            # Log initialization with client_id context
+            extra = {'client_id': cid, 'event': 'logger_init'}
+            logger.info(f"MQTT JSON logging initialized for client {cid} on topic {mqtt_topic}", extra=extra)
+            
         except Exception as e:
             logger.error(f"Failed to initialize MQTT handler for client {cid}: {e}")
-            # Fallback to basic console logging if MQTT setup fails
+            # Fallback to console logging with JSON format
             if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
                 console_handler_fallback = logging.StreamHandler()
-                console_handler_fallback.setFormatter(logging.Formatter(f"%(asctime)s - %(name)s - %(levelname)s - Client {cid} - Fallback - %(message)s"))
+                console_handler_fallback.setFormatter(JSONFormatter())
                 logger.addHandler(console_handler_fallback)
-                logger.info("Fell back to console logging due to MQTT handler initialization error.")
-                
+                extra = {'client_id': cid, 'event': 'fallback_logging'}
+                logger.info("Fell back to console logging due to MQTT handler initialization error", extra=extra)
+    
     return logger
-
 
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
@@ -135,12 +162,23 @@ parser.add_argument(
     help="Use non-IID partitioning for the dataset",
 )
 
-
-def train(net, trainloader, optimizer, epochs, device, logger): # Added logger
+def train(net, trainloader, optimizer, epochs, device, logger, client_id=None):
     """Train the model on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
+    
+    # Log training start
+    extra = {
+        'client_id': client_id,
+        'operation': 'training',
+        'event': 'training_start',
+        'metrics': {'epochs': epochs, 'batches_per_epoch': len(trainloader)}
+    }
+    logger.info(f"Starting training with {epochs} epochs", extra=extra)
+    
     for epoch_num in range(epochs):
-        logger.info(f"Starting epoch {epoch_num + 1}/{epochs}")
+        epoch_start_time = time.time()
+        epoch_loss = 0.0
+        
         for batch_idx, batch in enumerate(tqdm(trainloader, desc=f"Epoch {epoch_num+1} Training")):
             batch_data = list(batch.values())
             images, labels = batch_data[0], batch_data[1]
@@ -158,16 +196,64 @@ def train(net, trainloader, optimizer, epochs, device, logger): # Added logger
             loss.backward()
             optimizer.step()
             
-            if batch_idx % 10 == 0: # Log progress periodically
-                 logger.debug(f"Epoch {epoch_num+1}, Batch {batch_idx}: Loss {loss.item():.4f}")
-        logger.info(f"Finished epoch {epoch_num + 1}/{epochs}")
+            epoch_loss += loss.item()
+            
+            if batch_idx % 10 == 0:
+                extra = {
+                    'client_id': client_id,
+                    'operation': 'training',
+                    'event': 'batch_progress',
+                    'metrics': {
+                        'epoch': epoch_num + 1,
+                        'batch': batch_idx,
+                        'loss': loss.item()
+                    }
+                }
+                logger.debug(f"Epoch {epoch_num+1}, Batch {batch_idx}: Loss {loss.item():.4f}", extra=extra)
+        
+        # Log epoch completion
+        epoch_duration = time.time() - epoch_start_time
+        avg_epoch_loss = epoch_loss / len(trainloader)
+        extra = {
+            'client_id': client_id,
+            'operation': 'training',
+            'event': 'epoch_complete',
+            'metrics': {
+                'epoch': epoch_num + 1,
+                'duration_seconds': epoch_duration,
+                'average_loss': avg_epoch_loss
+            }
+        }
+        logger.info(f"Completed epoch {epoch_num + 1}/{epochs}", extra=extra)
+    
+    # Log training completion
+    extra = {
+        'client_id': client_id,
+        'operation': 'training',
+        'event': 'training_complete',
+        'metrics': {'total_epochs': epochs}
+    }
+    logger.info("Training completed", extra=extra)
 
 
-def test(net, testloader, device: str = "cpu", logger=None): # Added logger
+def test(net, testloader, device: str = "cpu", logger=None, client_id=None):
     """Validate the network on the testing set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
     net.eval()
+    
+    # Log testing start
+    if logger:
+        extra = {
+            'client_id': client_id,
+            'operation': 'testing',
+            'event': 'testing_start',
+            'metrics': {'test_batches': len(testloader)}
+        }
+        logger.info("Starting model evaluation", extra=extra)
+    
+    test_start_time = time.time()
+    
     with torch.no_grad():
         for batch in tqdm(testloader, desc="Testing"):
             batch_data = list(batch.values())
@@ -185,16 +271,32 @@ def test(net, testloader, device: str = "cpu", logger=None): # Added logger
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-            
+    
     accuracy = correct / total
+    avg_loss = loss / len(testloader)
+    test_duration = time.time() - test_start_time
+    
     if logger:
-        logger.info(f"Test Set Evaluation: Loss {loss/len(testloader):.4f}, Accuracy {accuracy:.4f}")
-    return loss / len(testloader), accuracy # Return average loss
+        extra = {
+            'client_id': client_id,
+            'operation': 'testing',
+            'event': 'testing_complete',
+            'metrics': {
+                'loss': avg_loss,
+                'accuracy': accuracy,
+                'correct_predictions': correct,
+                'total_samples': total,
+                'duration_seconds': test_duration
+            }
+        }
+        logger.info("Model evaluation completed", extra=extra)
+    
+    return avg_loss, accuracy
 
 
 def prepare_dataset(dataset, non_iid=False):
     """Get dataset and return client partitions and global testset."""
-    print("Dataset: ", dataset) # This print will not go to MQTT unless you change it
+    print("Dataset: ", dataset)  # This print will not go to MQTT unless you change it
     if dataset == "mnist":
         fds = FederatedDataset(dataset="mnist", partitioners={"train": IidPartitioner(num_partitions=NUM_CLIENTS)})
         img_key = "image"
@@ -205,13 +307,13 @@ def prepare_dataset(dataset, non_iid=False):
             partitioners={"train": NaturalIdPartitioner(partition_by="writer_id")}
         )
         img_key = "image"
-        norm = Normalize((0.1307,), (0.3081,)) # FEMNIST is grayscale, typically uses MNIST normalization
+        norm = Normalize((0.1307,), (0.3081,))
     elif dataset == "cifar10":
         fds = FederatedDataset(dataset="cifar10", partitioners={"train": IidPartitioner(num_partitions=NUM_CLIENTS)})
         img_key = "img"
         norm = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     elif dataset == "sc2":
-        partitions = prepare_scrimmage_data(NUM_CLIENTS) # Assuming this function returns partitions
+        partitions = prepare_scrimmage_data(NUM_CLIENTS)
     else:
         raise ValueError(f"Unsupported dataset: {dataset}")
 
@@ -224,20 +326,16 @@ def prepare_dataset(dataset, non_iid=False):
 
     trainsets = []
     validsets = []
-    # testsets = [] # testsets per client not used in FlowerClient, only valset
     
     for partition_id in range(NUM_CLIENTS):
         if dataset == "sc2":
-            partition = partitions[partition_id] # Assuming partitions is a list of datasets
+            partition = partitions[partition_id]
         else:
-            partition = fds.load_partition(partition_id, "train") # Load 'train' split for partitioning
+            partition = fds.load_partition(partition_id, "train")
             
-        # Split into train (70%) and validation (30%)
-        # The original code had a 70/15/15 split, but FlowerClient uses only train and val.
-        # If client-side testing is needed, testsets can be prepared and used in evaluate.
         train_val_split = partition.train_test_split(test_size=0.3, seed=42)
         train_data = train_val_split["train"]
-        val_data = train_val_split["test"] # 'test' from this split is used as validation
+        val_data = train_val_split["test"]
 
         train_data = train_data.with_transform(apply_transforms)
         val_data = val_data.with_transform(apply_transforms)
@@ -245,25 +343,47 @@ def prepare_dataset(dataset, non_iid=False):
         trainsets.append(train_data)
         validsets.append(val_data)
 
-    # Global testset - currently not directly used by the client's evaluate function in this setup
-    # testset_global = None
-    # if dataset != "sc2":
-    #     try:
-    #         testset_global = fds.load_split("test")
-    #         testset_global = testset_global.with_transform(apply_transforms)
-    #     except Exception as e:
-    #         print(f"Could not load global test set for {dataset}: {e}")
+    return trainsets, validsets
 
-    return trainsets, validsets # Removed testsets per client and global testset from return as they are not directly used
+bitwidths = [8, 4]
+
+def post_training_quantization(model, test_dataloader, model_path):
+    model.eval()
+    quantizers = dict()
+    for bitwidth in bitwidths:
+        model.load_state_dict(torch.load(model_path))
+        print(f'k-means quantizing model into {bitwidth} bits')
+        quantizer = KMeansQuantizer(model, bitwidth)
+        quantized_model_size = model_size(model, bitwidth)
+        print(f"    {bitwidth}-bit k-means quantized model has size={quantized_model_size:.2f} bytes")
+        _, quantized_model_accuracy = test(model, test_dataloader)
+        print(f"    {bitwidth}-bit k-means quantized model has accuracy={quantized_model_accuracy*100:.2f}%")
+        quantizers[bitwidth] = quantizer
+    return model
+
+def compare_model_sizes(original_model, quantized_model):
+    original_size = model_size(original_model)
+    print(f"\nOriginal model size: {original_size:.2f} bytes")
+    
+    original_params = model_params(original_model)
+    quantized_params = model_params(quantized_model)
+    
+    for bitwidth in bitwidths:
+        quantized_size = model_size(quantized_model, bitwidth)
+        print(f"Bitwidth: {bitwidth} bits - Quantized model size: {quantized_size:.2f} bytes")
+        print(f"Size reduction: {(1 - quantized_size/original_size) * 100:.2f}%")
+
+    print(f"\nOriginal model parameters: {original_params:,}")
+    print(f"Quantized model parameters: {quantized_params:,}")
 
 class FlowerClient(fl.client.NumPyClient):
     def __init__(self, trainset, valset, dataset, cid):
         self.cid = cid
-        self.logger = setup_mqtt_logger(cid) # Use MQTT logger
+        self.logger = setup_mqtt_logger(cid)
         
-        EMBEDDING_DIM = 2 # Example, adjust as per your SC2 model needs
-        HIDDEN_DIM = 100  # Example
-        TAGSET_SIZE = 2   # Example
+        EMBEDDING_DIM = 2
+        HIDDEN_DIM = 100
+        TAGSET_SIZE = 2
         
         self.trainset = trainset
         self.valset = valset
@@ -273,76 +393,125 @@ class FlowerClient(fl.client.NumPyClient):
         elif dataset == "femnist":
             self.model = FEMNISTCNN()
         elif dataset == "cifar10":
-            self.model = VeryDeepCNN() # Example, ensure this model exists
+            self.model = VeryDeepCNN()
         elif dataset == "sc2":
-            # Ensure BGRUTagger is defined or imported correctly
             self.model = BGRUTagger(embedding_dim=EMBEDDING_DIM, hidden_dim=HIDDEN_DIM, tagset_size=TAGSET_SIZE)
-        else: # Fallback for other datasets, e.g. mobilenet for CIFAR-10 like structure
-            self.logger.warning(f"Dataset {dataset} not explicitly handled, using mobilenet_v3_small. Adjust if needed.")
-            self.model = mobilenet_v3_small(num_classes=10) # Assuming 10 classes if not specified
+        else:
+            self.logger.warning(f"Dataset {dataset} not explicitly handled, using mobilenet_v3_small")
+            self.model = mobilenet_v3_small(num_classes=10)
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
-        self.logger.info(f"Client {cid} initialized with dataset '{dataset}', model '{type(self.model).__name__}' on device: {self.device}")
+        # Log client initialization
+        extra = {
+            'client_id': cid,
+            'event': 'client_init',
+            'metrics': {
+                'dataset': dataset,
+                'model_type': type(self.model).__name__,
+                'device': str(self.device),
+                'model_parameters': sum(p.numel() for p in self.model.parameters())
+            }
+        }
+        self.logger.info(f"Client {cid} initialized", extra=extra)
 
     def get_parameters(self, config):
-        self.logger.info("get_parameters called")
+        extra = {'client_id': self.cid, 'operation': 'get_parameters', 'event': 'operation_start'}
+        self.logger.info("get_parameters called", extra=extra)
+        
         param_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
         with CommunicationTimer(self.logger, "get_parameters") as timer:
-            timer.communication_size = param_bytes 
-            return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
+            timer.communication_size = param_bytes
+            parameters = [val.cpu().numpy() for _, val in self.model.state_dict().items()]
+            
+        extra = {
+            'client_id': self.cid,
+            'operation': 'get_parameters',
+            'event': 'operation_complete',
+            'metrics': {'parameter_bytes': param_bytes}
+        }
+        self.logger.info("get_parameters completed", extra=extra)
+        return parameters
 
     def set_parameters(self, parameters):
-        self.logger.info("set_parameters called")
+        extra = {'client_id': self.cid, 'operation': 'set_parameters', 'event': 'operation_start'}
+        self.logger.info("set_parameters called", extra=extra)
+        
         param_bytes = sum(p.nbytes for p in parameters)
         with CommunicationTimer(self.logger, "set_parameters") as timer:
-            timer.communication_size = param_bytes 
+            timer.communication_size = param_bytes
             params_dict = zip(self.model.state_dict().keys(), parameters)
-            state_dict = OrderedDict(
-                {k: torch.tensor(v) for k, v in params_dict} 
-            )
+            state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
+            
+        extra = {
+            'client_id': self.cid,
+            'operation': 'set_parameters',
+            'event': 'operation_complete',
+            'metrics': {'parameter_bytes': param_bytes}
+        }
+        self.logger.info("set_parameters completed", extra=extra)
 
     def fit(self, parameters, config):
-        self.logger.info(f"Starting fit operation with config: {config}")
+        extra = {
+            'client_id': self.cid,
+            'operation': 'fit',
+            'event': 'operation_start',
+            'metrics': {'config': config}
+        }
+        self.logger.info("Starting fit operation", extra=extra)
+        
         with CommunicationTimer(self.logger, "fit_model_transfer_and_train"):
-            self.set_parameters(parameters) 
+            self.set_parameters(parameters)
             
             batch_size, epochs = config["batch_size"], config["epochs"]
-            trainloader = DataLoader(self.trainset, batch_size=batch_size, shuffle=True, num_workers=0) 
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9) 
+            trainloader = DataLoader(self.trainset, batch_size=batch_size, shuffle=True, num_workers=0)
+            optimizer = torch.optim.SGD(self.model.parameters(), lr=0.01, momentum=0.9)
             
-            self.logger.info(f"Training with epochs: {epochs}, batch_size: {batch_size}")
-            train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, logger=self.logger)
+            train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, 
+                  logger=self.logger, client_id=self.cid)
             
             metrics = {
                 "training_epochs": epochs,
                 "batch_size": batch_size,
                 "dataset_size": len(trainloader.dataset)
             }
-            log_metrics(self.logger, metrics) 
-            self.logger.info("Fit operation completed.")
+            log_metrics(self.logger, metrics, client_id=self.cid, operation="fit")
+            
+            extra = {
+                'client_id': self.cid,
+                'operation': 'fit',
+                'event': 'operation_complete',
+                'metrics': metrics
+            }
+            self.logger.info("Fit operation completed", extra=extra)
             
             return self.get_parameters({}), len(trainloader.dataset), {}
 
-
     def evaluate(self, parameters, config):
-        self.logger.info(f"Starting evaluate operation with config: {config}")
-        with CommunicationTimer(self.logger, "evaluate_model_transfer_and_test"): 
+        extra = {
+            'client_id': self.cid,
+            'operation': 'evaluate',
+            'event': 'operation_start',
+            'metrics': {'config': config}
+        }
+        self.logger.info("Starting evaluate operation", extra=extra)
+        
+        with CommunicationTimer(self.logger, "evaluate_model_transfer_and_test"):
             self.set_parameters(parameters)
             
-            valloader = DataLoader(self.valset, batch_size=64, num_workers=0) 
-            loss, accuracy = test(self.model, valloader, device=self.device, logger=self.logger)
+            valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
+            loss, accuracy = test(self.model, valloader, device=self.device, 
+                                logger=self.logger, client_id=self.cid)
             
             metrics = {
                 "validation_loss": loss,
                 "validation_accuracy": accuracy,
                 "validation_dataset_size": len(valloader.dataset)
             }
-            log_metrics(self.logger, metrics)
+            log_metrics(self.logger, metrics, client_id=self.cid, operation="evaluate")
             
-            self.logger.info("Evaluate operation completed.")
             # Save and quantize model
             os.makedirs("models", exist_ok=True)
             original_model_path = "models/original_model.pt"
@@ -354,19 +523,23 @@ class FlowerClient(fl.client.NumPyClient):
             torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
             
             compare_model_sizes(self.model, quantized_model)
+            
+            extra = {
+                'client_id': self.cid,
+                'operation': 'evaluate',
+                'event': 'operation_complete',
+                'metrics': {
+                    'validation_loss': loss,
+                    'validation_accuracy': accuracy,
+                    'dataset_size': len(valloader.dataset)
+                }
+            }
+            self.logger.info("Evaluate operation completed", extra=extra)
+            
             return float(loss), len(valloader.dataset), {"accuracy": float(accuracy)}
 
 def main():
     args = parser.parse_args()
-    # Basic logging for main function before client-specific logger is up
-    # This will use root logger, which won't go to MQTT unless root is configured
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info(f"Client arguments: {args}")
-
-
-    if args.cid >= NUM_CLIENTS:
-        logging.error(f"Client ID {args.cid} is out of range (NUM_CLIENTS={NUM_CLIENTS}).")
-        return
 
     dataset_name = args.dataset.lower()
     logging.info(f"Preparing dataset: {dataset_name}, Non-IID: {args.non_iid}")

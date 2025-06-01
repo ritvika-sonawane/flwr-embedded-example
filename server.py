@@ -1,9 +1,10 @@
+# python server.py --rounds 3 --num_clients 5 --local_ep 1 --min_num_clients 2 --sample_fraction 0.2 --server_address="0.0.0.0:8080"
+
 import argparse
 import logging
 from typing import List, Tuple
-import time
-import mqtthandler # Added
-import paho.mqtt.client as mqtt # Added
+import mqtthandler
+import paho.mqtt.client as mqtt
 
 import flwr as fl
 from flwr.common import Metrics
@@ -15,10 +16,9 @@ MQTT_TOPIC_SERVER = "federated_learning/server/logs"
 
 # --- Configure Logging ---
 def setup_server_mqtt_logging():
-    logger = logging.getLogger("fl_server") # Get a specific logger for the server
+    logger = logging.getLogger("fl_server") # server logger
     logger.setLevel(logging.INFO)
     
-    # Prevent duplicate handlers
     if not logger.handlers:
         # Console Handler (optional)
         # console_handler = logging.StreamHandler()
@@ -51,16 +51,6 @@ def setup_server_mqtt_logging():
 # Get the server logger instance
 server_logger = setup_server_mqtt_logging()
 
-
-# The original logging.basicConfig is replaced by the setup_server_mqtt_logging
-# If you still want file logging, you can add a FileHandler in setup_server_mqtt_logging
-# logging.basicConfig(
-#     filename=f"logs/server_log_{''.join(time.asctime().split()[:-1])}.log", # Original
-#     filemode="w",
-#     format="%(asctime)s - %(levelname)s - %(message)s",
-#     level=logging.INFO
-# )
-
 parser = argparse.ArgumentParser(description="Flower Embedded devices")
 parser.add_argument(
     "--server_address",
@@ -77,13 +67,13 @@ parser.add_argument(
 parser.add_argument(
     "--local_ep",
     type=int,
-    default=1, # Default changed from 5 to 1 as per original snippet
+    default=1,
     help="Number of local epochs of federated learning (default: 1)",
 )
 parser.add_argument(
     "--sample_fraction",
     type=float,
-    default=0.2, # Default changed from 1.0 to 0.2 as per original snippet
+    default=0.2,
     help="Fraction of available clients used for fit/evaluate (default: 0.2)",
 )
 parser.add_argument(
@@ -92,7 +82,12 @@ parser.add_argument(
     default=2,
     help="Minimum number of available clients required for sampling (default: 2)",
 )
-
+parser.add_argument(
+    "--num_clients",
+    type=int,
+    default=10,
+    help="Total Number of clients for sampling (default: 5)",
+)
 
 # Define metric aggregation function
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
@@ -107,38 +102,28 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     server_logger.info(f"Aggregated weighted average accuracy: {aggregated_accuracy:.4f}")
     return {"accuracy": aggregated_accuracy}
 
-
-def fit_config(server_round: int):
-    args = parser.parse_args([]) # Parse with empty list if not expecting CLI args here or load them globally
+def generate_fit_config(server_round: int):
+    args = parser.parse_args([]) # empty list if not expecting args
     config = {
-        "server_round": server_round, # Pass server_round to client
+        "server_round": server_round,
+        "num_clients": args.num_clients,
         "epochs": args.local_ep,
         "batch_size": 16,
     }
     server_logger.info(f"Dispatching fit config for round {server_round}: {config}")
     return config
 
-
 def main():
     args = parser.parse_args()
-    # All logging from here will use server_logger which is MQTT configured
     server_logger.info("Starting Flower server with arguments: %s", args)
-    # print(args) # This print will not go to MQTT unless you change it to server_logger.info
 
     strategy = fl.server.strategy.FedAvg(
-        # fraction_fit=args.sample_fraction,
-        # fraction_evaluate=1.0,
-        # min_fit_clients=args.min_num_clients,
-        # min_evaluate_clients=args.min_num_clients, # Often good to set min_evaluate_clients too
-        # min_available_clients=args.min_num_clients, # Ensure enough clients are available overall
-        # on_fit_config_fn=fit_config,
-        # evaluate_metrics_aggregation_fn=weighted_average,
-        # You can add more callbacks here for logging, e.g., fit_round, evaluate_round
-        fraction_fit=args.sample_fraction,
-        fraction_evaluate=args.sample_fraction,
-        min_fit_clients=args.min_num_clients,
-        on_fit_config_fn=fit_config,
-        evaluate_metrics_aggregation_fn=weighted_average,
+        fraction_fit = args.sample_fraction,
+        fraction_evaluate = args.sample_fraction,
+        min_fit_clients = args.min_num_clients,
+        min_available_clients = args.num_clients,
+        on_fit_config_fn = generate_fit_config,
+        evaluate_metrics_aggregation_fn = weighted_average,
     )
 
     server_logger.info("Flower server strategy configured. Starting server...")

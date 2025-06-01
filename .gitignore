@@ -2,4 +2,7 @@
 original_model.pt
 /__pycache__/
 /logs
+/logs_old
+/_static
+/quantize/__pycache__
 /models
