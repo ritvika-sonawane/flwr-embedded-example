@@ -1,7 +1,7 @@
 # python client_pytorch.py --cid 0 --server_address="0.0.0.0:8080" --dataset mnist
 import argparse
 import warnings
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 import os
 import logging
 import json
@@ -15,8 +15,9 @@ from torchvision.models import mobilenet_v3_small
 from torchvision.transforms import Compose, Normalize, ToTensor
 from tqdm import tqdm
 from models import *
-from quantize.k_means import KMeansQuantizer
+from quantize.k_means import KMeansQuantizer, Codebook
 from flwr_datasets.partitioner import NaturalIdPartitioner, IidPartitioner
+import numpy as np
 
 # --- MQTT Configuration ---
 MQTT_BROKER_HOST = "localhost"
@@ -26,6 +27,7 @@ MQTT_BASE_TOPIC_CLIENT = "federated_learning/client"
 warnings.filterwarnings("ignore", category=UserWarning)
 
 NUM_CLIENTS = 10
+QUANTIZATION_BITS = 8  # Fixed to 8 bits
 
 # --- Custom JSON Formatter for MQTT Logging ---
 class JSONFormatter(logging.Formatter):
@@ -300,7 +302,7 @@ def post_training_quantization(model, test_dataloader, model_path):
         _, quantized_model_accuracy = test(model, test_dataloader)
         print(f"    {bitwidth}-bit k-means quantized model has accuracy={quantized_model_accuracy*100:.2f}%")
         quantizers[bitwidth] = quantizer
-    return model
+    return model, quantizers
 
 def compare_model_sizes(original_model, quantized_model):
     original_size = model_size(original_model)
@@ -316,6 +318,45 @@ def compare_model_sizes(original_model, quantized_model):
 
     print(f"\nOriginal model parameters: {original_params:,}")
     print(f"Quantized model parameters: {quantized_params:,}")
+
+def quantize_parameters_for_transmission(model, quantizer):
+    """Convert model parameters to quantized format using cluster indices."""
+    quantized_params = []
+    cookbooks = []
+    
+    for name, param in model.named_parameters():
+        # Get the codebook for this parameter
+        codebook = quantizer.codebook[name]
+        
+        # Extract centroids and labels
+        centroids = codebook.centroids.cpu().numpy()
+        labels = codebook.labels.cpu().numpy()
+        
+        # Reshape labels to match parameter shape
+        param_shape = param.shape
+        indices = labels.reshape(param_shape).astype(np.uint8)
+        
+        quantized_params.append(indices)
+        cookbooks.append(centroids)
+    
+    return quantized_params, cookbooks
+
+def dequantize_parameters_from_indices(indices_list, cookbooks, model_state_dict):
+    """Reconstruct parameters from quantized indices and cookbooks."""
+    reconstructed_params = []
+    
+    for idx, (param_name, param_shape) in enumerate(model_state_dict.items()):
+        indices = indices_list[idx]
+        cookbook = cookbooks[idx]
+        
+        # Reconstruct parameter values from indices
+        param_flat = indices.flatten()
+        reconstructed_flat = np.array([cookbook[i] for i in param_flat])
+        reconstructed = reconstructed_flat.reshape(param_shape.shape)
+        
+        reconstructed_params.append(reconstructed)
+    
+    return reconstructed_params
 
 class FlowerClient(fl.client.NumPyClient):
     def __init__(self, trainset, valset, dataset, cid):
@@ -344,6 +385,9 @@ class FlowerClient(fl.client.NumPyClient):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         
+        # Initialize quantizer immediately for all communication to be quantized
+        self.quantizer = KMeansQuantizer(self.model, QUANTIZATION_BITS)
+        
         # Log client initialization (kept as requested)
         extra = {
             'client_id': cid,
@@ -352,26 +396,44 @@ class FlowerClient(fl.client.NumPyClient):
                 'dataset': dataset,
                 'model_type': type(self.model).__name__,
                 'device': str(self.device),
-                'model_parameters': sum(p.numel() for p in self.model.parameters())
+                'model_parameters': sum(p.numel() for p in self.model.parameters()),
+                'quantization_bits': QUANTIZATION_BITS
             }
         }
-        self.logger.info(f"Client {cid} initialized", extra=extra)
+        self.logger.info(f"Client {cid} initialized with {QUANTIZATION_BITS}-bit quantization", extra=extra)
 
     def get_parameters(self, config):
         extra = {'client_id': self.cid, 'operation': 'get_parameters', 'event': 'operation_start'}
         self.logger.info("get_parameters called", extra=extra)
         
-        param_bytes = sum(p.numel() * p.element_size() for p in self.model.parameters())
+        # Always send quantized parameters
+        indices_list, cookbooks = quantize_parameters_for_transmission(self.model, self.quantizer)
+        
+        # Calculate communication size (only indices count, not cookbooks)
+        total_indices = sum(indices.size for indices in indices_list)
+        param_bytes = total_indices  # 1 byte per index for 8-bit quantization
+        
         with CommunicationTimer(self.logger, "get_parameters") as timer:
             timer.communication_size = param_bytes
-            parameters = [val.cpu().numpy() for _, val in self.model.state_dict().items()]
             
+            # Combine indices and cookbooks into parameters list
+            # Format: [indices_0, cookbook_0, indices_1, cookbook_1, ...]
+            parameters = []
+            for indices, cookbook in zip(indices_list, cookbooks):
+                parameters.append(indices)
+                parameters.append(cookbook)
+        
         extra = {
             'client_id': self.cid,
             'operation': 'get_parameters',
             'event': 'operation_complete',
-            'metrics': {'parameter_bytes': param_bytes}
+            'metrics': {
+                'parameter_bytes': param_bytes,
+                'quantized': True,
+                'total_indices': total_indices
+            }
         }
+        
         self.logger.info("get_parameters completed", extra=extra)
         return parameters
 
@@ -379,19 +441,46 @@ class FlowerClient(fl.client.NumPyClient):
         extra = {'client_id': self.cid, 'operation': 'set_parameters', 'event': 'operation_start'}
         self.logger.info("set_parameters called", extra=extra)
         
-        param_bytes = sum(p.nbytes for p in parameters)
+        # All parameters are quantized (alternating indices and cookbooks)
+        # Extract indices and cookbooks
+        indices_list = []
+        cookbooks = []
+        for i in range(0, len(parameters), 2):
+            indices_list.append(parameters[i])
+            cookbooks.append(parameters[i + 1])
+        
+        # Calculate communication size (only indices count)
+        total_indices = sum(indices.size for indices in indices_list)
+        param_bytes = total_indices  # 1 byte per index
+        
         with CommunicationTimer(self.logger, "set_parameters") as timer:
             timer.communication_size = param_bytes
-            params_dict = zip(self.model.state_dict().keys(), parameters)
+            
+            # Dequantize parameters
+            reconstructed_params = dequantize_parameters_from_indices(
+                indices_list, cookbooks, self.model.state_dict()
+            )
+            
+            # Set parameters
+            params_dict = zip(self.model.state_dict().keys(), reconstructed_params)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
             
+            # Re-quantize the model with the new parameters to update the quantizer
+            # This ensures the quantizer is consistent with the current model state
+            self.quantizer = KMeansQuantizer(self.model, QUANTIZATION_BITS)
+        
         extra = {
             'client_id': self.cid,
             'operation': 'set_parameters',
             'event': 'operation_complete',
-            'metrics': {'parameter_bytes': param_bytes}
+            'metrics': {
+                'parameter_bytes': param_bytes,
+                'quantized': True,
+                'total_indices': total_indices
+            }
         }
+        
         self.logger.info("set_parameters completed", extra=extra)
 
     def fit(self, parameters, config):
@@ -407,18 +496,17 @@ class FlowerClient(fl.client.NumPyClient):
         train(self.model, trainloader, optimizer, epochs=epochs, device=self.device, 
               logger=None, client_id=self.cid)  # No MQTT logger passed
         
-        # Post-training quantization after training
-        valloader = DataLoader(self.valset, batch_size=64, num_workers=0)
-        os.makedirs("models", exist_ok=True)
-        original_model_path = "models/original_model.pt"
-        torch.save(self.model.state_dict(), original_model_path)
-        
-        quantized_model = post_training_quantization(self.model, valloader, original_model_path)
-        torch.save(quantized_model.state_dict(), "models/quantized_model.pt")
-        
-        compare_model_sizes(self.model, quantized_model)
+        # Re-quantize model after training to update cluster centers based on new weights
+        print(f"Client {self.cid}: Re-quantizing model after training")
+        self.quantizer = KMeansQuantizer(self.model, QUANTIZATION_BITS)
         
         print(f"Client {self.cid}: Fit operation completed")
+        
+        # Check unique values after quantization
+        for name, param in self.model.named_parameters():
+            codebook = self.quantizer.codebook[name]
+            num_unique = len(codebook.centroids)
+            print(f"{name}: {num_unique} unique values (clusters)")
         
         return self.get_parameters({}), len(trainloader.dataset), {}
 

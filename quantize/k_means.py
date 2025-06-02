@@ -1,3 +1,4 @@
+# k-means
 import torch
 import torch.nn as nn
 from collections import namedtuple
@@ -19,11 +20,12 @@ def k_means_quantize(fp32_tensor: torch.Tensor, bitwidth=4, codebook=None):
     return codebook
 
 class KMeansQuantizer:
-    def __init__(self, model : nn.Module, bitwidth=4):
+    def __init__(self, model : nn.Module, bitwidth=8):
         self.codebook = KMeansQuantizer.quantize(model, bitwidth)
+        self.num_bits = bitwidth
 
     @torch.no_grad()
-    def quantize(model: nn.Module, bitwidth=4):
+    def quantize(model: nn.Module, bitwidth=8):
         codebook = dict()
         for name, param in model.named_parameters():
             # print(name, param)
