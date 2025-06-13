@@ -90,7 +90,7 @@ parser.add_argument(
 parser.add_argument(
     "--num_clients",
     type=int,
-    default=10,
+    default=5,
     help="Total Number of clients for sampling (default: 5)",
 )
 

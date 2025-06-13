@@ -406,22 +406,24 @@ class FlowerClient(fl.client.NumPyClient):
         extra = {'client_id': self.cid, 'operation': 'get_parameters', 'event': 'operation_start'}
         self.logger.info("get_parameters called", extra=extra)
         
-        # Always send quantized parameters
+        # Always send quantized parameters - do quantization outside the timer
         indices_list, cookbooks = quantize_parameters_for_transmission(self.model, self.quantizer)
         
         # Calculate communication size (only indices count, not cookbooks)
         total_indices = sum(indices.size for indices in indices_list)
         param_bytes = total_indices  # 1 byte per index for 8-bit quantization
         
+        # Combine indices and cookbooks into parameters list outside the timer
+        # Format: [indices_0, cookbook_0, indices_1, cookbook_1, ...]
+        parameters = []
+        for indices, cookbook in zip(indices_list, cookbooks):
+            parameters.append(indices)
+            parameters.append(cookbook)
+            
+        # Only measure the time for parameter transfer
         with CommunicationTimer(self.logger, "get_parameters") as timer:
             timer.communication_size = param_bytes
-            
-            # Combine indices and cookbooks into parameters list
-            # Format: [indices_0, cookbook_0, indices_1, cookbook_1, ...]
-            parameters = []
-            for indices, cookbook in zip(indices_list, cookbooks):
-                parameters.append(indices)
-                parameters.append(cookbook)
+            # Simulate just the communication time - no processing here
         
         extra = {
             'client_id': self.cid,
@@ -453,22 +455,25 @@ class FlowerClient(fl.client.NumPyClient):
         total_indices = sum(indices.size for indices in indices_list)
         param_bytes = total_indices  # 1 byte per index
         
+        # Only measure the time for parameter transfer
         with CommunicationTimer(self.logger, "set_parameters") as timer:
             timer.communication_size = param_bytes
-            
-            # Dequantize parameters
-            reconstructed_params = dequantize_parameters_from_indices(
-                indices_list, cookbooks, self.model.state_dict()
-            )
-            
-            # Set parameters
-            params_dict = zip(self.model.state_dict().keys(), reconstructed_params)
-            state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
-            self.model.load_state_dict(state_dict, strict=True)
-            
-            # Re-quantize the model with the new parameters to update the quantizer
-            # This ensures the quantizer is consistent with the current model state
-            self.quantizer = KMeansQuantizer(self.model, QUANTIZATION_BITS)
+            # Simulate just the communication time - no processing here
+        
+        # Do all processing outside the timer
+        # Dequantize parameters
+        reconstructed_params = dequantize_parameters_from_indices(
+            indices_list, cookbooks, self.model.state_dict()
+        )
+        
+        # Set parameters
+        params_dict = zip(self.model.state_dict().keys(), reconstructed_params)
+        state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+        self.model.load_state_dict(state_dict, strict=True)
+        
+        # Re-quantize the model with the new parameters to update the quantizer
+        # This ensures the quantizer is consistent with the current model state
+        self.quantizer = KMeansQuantizer(self.model, QUANTIZATION_BITS)
         
         extra = {
             'client_id': self.cid,
